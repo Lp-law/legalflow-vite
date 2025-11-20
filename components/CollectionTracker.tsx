@@ -1,0 +1,142 @@
+import React, { useMemo } from 'react';
+import { Transaction } from '../types';
+import { AlertCircle, CheckCircle, DollarSign, Calendar } from 'lucide-react';
+
+interface CollectionTrackerProps {
+  transactions: Transaction[];
+  onMarkAsPaid: (transaction: Transaction) => void;
+}
+
+const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onMarkAsPaid }) => {
+  
+  // Filter: Income -> Pending -> Only "Sh'char Tircha" (Fee)
+  const pendingFees = useMemo(() => {
+    return transactions
+      .filter(t => 
+          t.type === 'income' && 
+          t.status === 'pending' && 
+          t.category === 'שכר טרחה' // Strict filter as requested
+      )
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [transactions]);
+
+  const calculateDaysOpen = (dateStr: string) => {
+    const start = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - start.getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  };
+
+  const totalPending = pendingFees.reduce((sum, t) => sum + t.amount, 0);
+  const overdueCount = pendingFees.filter(t => calculateDaysOpen(t.date) > 30).length;
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+           <div>
+             <p className="text-sm text-slate-500 font-medium">צפי גבייה (שכ"ט בלבד)</p>
+             <p className="text-2xl font-bold text-slate-800">₪{totalPending.toLocaleString()}</p>
+           </div>
+           <div className="p-3 bg-blue-50 rounded-full">
+             <DollarSign className="w-6 h-6 text-blue-600" />
+           </div>
+        </div>
+
+        <div className={`p-6 rounded-xl shadow-sm border flex items-center justify-between ${overdueCount > 0 ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+           <div>
+             <p className={`text-sm font-medium ${overdueCount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+               חשבונות בפיגור (>30 יום)
+             </p>
+             <p className={`text-2xl font-bold ${overdueCount > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+               {overdueCount}
+             </p>
+           </div>
+           <div className={`p-3 rounded-full ${overdueCount > 0 ? 'bg-red-100' : 'bg-emerald-100'}`}>
+             <AlertCircle className={`w-6 h-6 ${overdueCount > 0 ? 'text-red-600' : 'text-emerald-600'}`} />
+           </div>
+        </div>
+      </div>
+
+      {/* Aging Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-blue-600" />
+            מעקב גבייה (Aging Report)
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">
+            רשימת דרישות תשלום/חשבונות עסקה פתוחים (שכר טרחה בלבד). שורות אדומות מסמנות פיגור של מעל 30 יום.
+          </p>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-right">
+            <thead className="bg-slate-100 text-slate-600 font-bold">
+              <tr>
+                <th className="px-6 py-4">תאריך דרישה</th>
+                <th className="px-6 py-4">לקוח</th>
+                <th className="px-6 py-4">אסמכתא/תיק</th>
+                <th className="px-6 py-4">סכום לתשלום</th>
+                <th className="px-6 py-4">ימים פתוח</th>
+                <th className="px-6 py-4">פעולות</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {pendingFees.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center gap-2">
+                        <CheckCircle className="w-10 h-10 text-emerald-400" />
+                        <span className="text-lg font-medium text-slate-600">אין חובות פתוחים</span>
+                        <span>כל דרישות שכר הטרחה שולמו במלואן.</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                pendingFees.map((t) => {
+                  const daysOpen = calculateDaysOpen(t.date);
+                  const isOverdue = daysOpen > 30;
+                  
+                  return (
+                    <tr key={t.id} className={`transition-all ${isOverdue ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}>
+                      <td className="px-6 py-4 font-medium text-slate-700">
+                        {new Date(t.date).toLocaleDateString('he-IL')}
+                      </td>
+                      <td className="px-6 py-4 text-slate-900 font-bold text-base">{t.description}</td>
+                      <td className="px-6 py-4 text-slate-500">
+                          {t.clientReference ? (
+                             <span className="bg-white border border-slate-200 px-2 py-1 rounded text-xs">#{t.clientReference}</span>
+                          ) : '-'}
+                      </td>
+                      <td className="px-6 py-4 font-bold text-slate-800">₪{t.amount.toLocaleString()}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${isOverdue ? 'bg-red-200 text-red-800' : 'bg-slate-200 text-slate-700'}`}>
+                            {daysOpen} ימים
+                            </span>
+                            {isOverdue && <AlertCircle className="w-4 h-4 text-red-600" />}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button 
+                          onClick={() => onMarkAsPaid(t)}
+                          className="text-xs bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm font-medium"
+                        >
+                          סמן כשולם
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CollectionTracker;
