@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Upload } from 'lucide-react';
+import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Upload, Menu } from 'lucide-react';
 import type { Transaction, TransactionGroup } from './types';
 import { getTransactions, saveTransactions, getInitialBalance, saveInitialBalance, exportBackupJSON, applyLoanOverrides, rememberLoanOverride, removeLoanOverride, replaceClients, replaceCustomCategories } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
@@ -73,6 +73,7 @@ const App: React.FC = () => {
   const [balanceDraft, setBalanceDraft] = useState(() => getInitialBalance().toString());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importFeedback, setImportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
 
   // --- Persistence ---
   useEffect(() => {
@@ -392,6 +393,21 @@ const App: React.FC = () => {
     fileInputRef.current?.click();
   };
 
+  const handleMobileImportClick = () => {
+    handleImportButtonClick();
+    setIsMobileActionsOpen(false);
+  };
+
+  const handleMobileExportClick = () => {
+    exportBackupJSON(transactions);
+    setIsMobileActionsOpen(false);
+  };
+
+  const handleMobileBalanceClick = () => {
+    setIsBalanceModalOpen(true);
+    setIsMobileActionsOpen(false);
+  };
+
   if (!currentUser) {
     return <Login onLogin={handleLogin} />;
   }
@@ -474,7 +490,7 @@ const App: React.FC = () => {
           </button>
           {importFeedback && (
             <div
-              className={`text-xs px-3 py-2 rounded-lg border ${
+              className={`hidden md:block text-xs px-3 py-2 rounded-lg border ${
                 importFeedback.type === 'success'
                   ? 'border-emerald-300 text-emerald-200 bg-emerald-500/10'
                   : 'border-red-300 text-red-200 bg-red-500/10'
@@ -506,6 +522,13 @@ const App: React.FC = () => {
         </div>
         <div className="flex items-center gap-4">
             <div className="text-sm font-bold text-white">₪{calculateCurrentBalance().toLocaleString()}</div>
+            <button
+              onClick={() => setIsMobileActionsOpen(true)}
+              className="text-slate-300 hover:text-white transition-colors"
+              aria-label="פעולות"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <button onClick={handleLogout} className="text-slate-400 hover:text-white">
                 <LogOut className="w-5 h-5" />
             </button>
@@ -614,6 +637,61 @@ const App: React.FC = () => {
         initialType={formInitialType}
         initialGroup={formInitialGroup}
       />
+
+      {isMobileActionsOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-white rounded-t-3xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-800">פעולות מהירות</h3>
+              <button
+                onClick={() => setIsMobileActionsOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors text-sm font-semibold"
+              >
+                סגור
+              </button>
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={handleMobileImportClick}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                ייבוא גיבוי
+              </button>
+              <button
+                onClick={handleMobileExportClick}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                ייצוא גיבוי
+              </button>
+              <button
+                onClick={handleMobileBalanceClick}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                עדכון יתרת פתיחה
+              </button>
+              <button
+                onClick={() => {
+                  setIsMobileActionsOpen(false);
+                  handleLogout();
+                }}
+                className="w-full px-4 py-3 rounded-xl border border-red-200 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors"
+              >
+                התנתק
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importFeedback && (
+        <div
+          className={`md:hidden fixed bottom-24 left-4 right-4 z-40 px-4 py-3 rounded-xl text-sm font-semibold shadow-lg ${
+            importFeedback.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+          }`}
+        >
+          {importFeedback.message}
+        </div>
+      )}
 
       {isBalanceModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/70 backdrop-blur-sm p-4 pt-20 md:pt-24 overflow-auto">
