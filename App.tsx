@@ -1,9 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck } from 'lucide-react';
+import {
+  Plus,
+  LayoutDashboard,
+  Table2,
+  LogOut,
+  Briefcase,
+  FileText,
+  ShieldCheck,
+} from 'lucide-react';
+
 import { Transaction, TransactionGroup } from './types';
-import { getTransactions, saveTransactions, getInitialBalance, exportBackupJSON } from './services/storageService';
+import {
+  getTransactions,
+  saveTransactions,
+  getInitialBalance,
+  saveInitialBalance,
+  exportBackupJSON,
+} from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
 import { syncTaxTransactions } from './services/taxService';
+
 import Dashboard from './components/Dashboard';
 import TransactionForm from './components/TransactionForm';
 import MonthlyFlow from './components/MonthlyFlow';
@@ -12,68 +28,125 @@ import ExecutiveSummary from './components/ExecutiveSummary';
 import Logo from './components/Logo';
 import Login from './components/Login';
 
+const DECIMAL_INPUT_PATTERN = /^-?\d*(?:[.,]\d*)?$/;
+
 const App: React.FC = () => {
+  // ------------------------------
   // Auth State
-  const [currentUser, setCurrentUser] = useState<string | null>(() => sessionStorage.getItem('legalflow_user'));
-  
-  // App State - Lazy initialization ensures we read from storage on first render before any overwrites
+  // ------------------------------
+  const [currentUser, setCurrentUser] = useState<string | null>(() =>
+    sessionStorage.getItem('legalflow_user')
+  );
+
+  // ------------------------------
+  // App State
+  // ------------------------------
+
+  // נטען תנועות מה־storage פעם אחת, נסנכרן מיסים פעם אחת על ההתחלה
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
-      const stored = getTransactions();
-      // Run sync once on load to ensure old data generates taxes if missing
-      return syncTaxTransactions(stored);
+    const stored = getTransactions();
+    return syncTaxTransactions(stored);
   });
-  
-  const [initialBalance, setInitialBalance] = useState(() => getInitialBalance());
+
+  const [initialBalance, setInitialBalance] = useState<number>(() =>
+    getInitialBalance()
+  );
+
   const [isFormOpen, setIsFormOpen] = useState(false);
-  
-  // Updated tabs
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'flow' | 'collection' | 'summary'>('flow');
 
-  // Form initial state helpers
-  const [formInitialDate, setFormInitialDate] = useState<string | undefined>(undefined);
-  const [formInitialType, setFormInitialType] = useState<'income' | 'expense' | undefined>(undefined);
-  const [formInitialGroup, setFormInitialGroup] = useState<TransactionGroup | undefined>(undefined);
+  const [activeTab, setActiveTab] = useState<
+    'dashboard' | 'flow' | 'collection' | 'summary'
+  >('flow');
 
-  // --- Persistence ---
+  // ערכי ברירת מחדל לפתיחת הטופס
+  const [formInitialDate, setFormInitialDate] = useState<string | undefined>(
+    undefined
+  );
+  const [formInitialType, setFormInitialType] = useState<
+    'income' | 'expense' | undefined
+  >(undefined);
+  const [formInitialGroup, setFormInitialGroup] = useState<
+    TransactionGroup | undefined
+  >(undefined);
+  const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+  const [balanceDraft, setBalanceDraft] = useState(() => getInitialBalance().toString());
+
+  // ------------------------------
+  // Persistence
+  // ------------------------------
+
+  // כל שינוי בתנועות – נשמור ל־localStorage
   useEffect(() => {
-     // Whenever transactions change, we save them.
-     // Note: The sync logic is handled inside the update handlers to avoid infinite loops in useEffect
-     saveTransactions(transactions);
+    saveTransactions(transactions);
   }, [transactions]);
 
-  // --- 3-Hour Automatic Backup ---
+  // שמירת יתרת פתיחה אם נרצה לשנות אותה בעתיד (כרגע רק קוראים פעם אחת)
+  useEffect(() => {
+    saveInitialBalance(initialBalance);
+  }, [initialBalance]);
+
+  useEffect(() => {
+    setBalanceDraft(initialBalance.toString());
+  }, [initialBalance]);
+
+  // ------------------------------
+  // 3-Hour Automatic Backup
+  // ------------------------------
   useEffect(() => {
     if (!currentUser) return;
 
-    // 3 Hours in milliseconds
-    const INTERVAL_MS = 3 * 60 * 60 * 1000;
-    
+    const INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 שעות
+
     const backupTimer = setInterval(() => {
-        console.log('Executing scheduled backup...');
-        exportBackupJSON(transactions); 
+      console.log('Executing scheduled backup...');
+      exportBackupJSON(transactions);
     }, INTERVAL_MS);
 
     return () => clearInterval(backupTimer);
   }, [currentUser, transactions]);
 
-  // --- 16:00 Daily Email Trigger ---
+  // ------------------------------
+  // 16:00 Daily Email Trigger
+  // ------------------------------
   useEffect(() => {
-      if (!currentUser) return;
+    if (!currentUser) return;
 
-      const emailCheckTimer = setInterval(() => {
-          const now = new Date();
-          if (now.getHours() === 16 && now.getMinutes() === 0 && now.getSeconds() < 10) {
-              const subject = `סיכום תזרים יומי - ${now.toLocaleDateString('he-IL')}`;
-              const body = encodeURIComponent(generateExecutiveSummary('month', transactions));
-              window.location.href = `mailto:lidor@lp-law.co.il,lior@lp-law.co.il?subject=${subject}&body=${body}`;
-          }
-      }, 10000);
+    const emailCheckTimer = setInterval(() => {
+      const now = new Date();
+      if (
+        now.getHours() === 16 &&
+        now.getMinutes() === 0 &&
+        now.getSeconds() < 10
+      ) {
+        const subject = `סיכום תזרים יומי - ${now.toLocaleDateString('he-IL')}`;
+        const body = encodeURIComponent(
+          generateExecutiveSummary('month', transactions)
+        );
+        window.location.href = `mailto:lidor@lp-law.co.il,lior@lp-law.co.il?subject=${subject}&body=${body}`;
+      }
+    }, 10_000);
 
-      return () => clearInterval(emailCheckTimer);
+    return () => clearInterval(emailCheckTimer);
   }, [currentUser, transactions]);
 
+  // ------------------------------
+  // Handlers
+  // ------------------------------
 
-  // --- Handlers ---
+  const handleBalanceDraftChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { value } = event.target;
+    if (DECIMAL_INPUT_PATTERN.test(value)) {
+      setBalanceDraft(value);
+    }
+  };
+
+  const handleSaveInitialBalance = () => {
+    const sanitizedDraft = balanceDraft.replace(',', '.');
+    const parsed = Number(sanitizedDraft);
+    const normalized = Number.isFinite(parsed) ? parsed : 0;
+    setInitialBalance(normalized);
+    setIsBalanceModalOpen(false);
+  };
 
   const handleLogin = (username: string) => {
     setCurrentUser(username);
@@ -85,20 +158,22 @@ const App: React.FC = () => {
     sessionStorage.removeItem('legalflow_user');
   };
 
-  // Helper to update transactions and sync taxes
+  // עדכון תנועות + הרצת syncTaxTransactions במקום אחד
   const updateTransactionsWithSync = (newTransactionsList: Transaction[]) => {
-      const synced = syncTaxTransactions(newTransactionsList);
-      setTransactions(synced);
+    const synced = syncTaxTransactions(newTransactionsList);
+    setTransactions(synced);
   };
 
-  const handleAddTransactionBatch = (newTransactions: Omit<Transaction, 'id'>[]) => {
-      const processedTransactions = newTransactions.map(t => ({
-          ...t,
-          id: crypto.randomUUID()
-      }));
-      
-      const updatedList = [...transactions, ...processedTransactions];
-      updateTransactionsWithSync(updatedList);
+  const handleAddTransactionBatch = (
+    newTransactions: Omit<Transaction, 'id'>[]
+  ) => {
+    const processedTransactions: Transaction[] = newTransactions.map((t) => ({
+      ...t,
+      id: crypto.randomUUID(),
+    }));
+
+    const updatedList = [...transactions, ...processedTransactions];
+    updateTransactionsWithSync(updatedList);
   };
 
   const handleAddTransaction = (newTransaction: Omit<Transaction, 'id'>) => {
@@ -106,23 +181,29 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTransaction = (id: string) => {
-    if(window.confirm('האם אתה בטוח שברצונך למחוק תנועה זו?')) {
-        const updatedList = transactions.filter(t => t.id !== id);
-        updateTransactionsWithSync(updatedList);
+    if (window.confirm('האם אתה בטוח שברצונך למחוק תנועה זו?')) {
+      const updatedList = transactions.filter((t) => t.id !== id);
+      updateTransactionsWithSync(updatedList);
     }
   };
 
   const handleMarkAsPaid = (transaction: Transaction) => {
-      if(window.confirm(`האם לסמן את החשבון של ${transaction.description} כשולם?`)) {
-          const updated = transactions.map(t => 
-            t.id === transaction.id ? { ...t, status: 'completed' as const } : t
-          );
-          // No need to sync taxes here as amount/date didn't change, but status change is fine.
-          setTransactions(updated); 
-      }
+    if (
+      window.confirm(`האם לסמן את החשבון של ${transaction.description} כשולם?`)
+    ) {
+      const updated = transactions.map((t) =>
+        t.id === transaction.id ? { ...t, status: 'completed' as const } : t
+      );
+      // אין שינוי סכום/תאריך – אין צורך בסנכרון מיסים מחדש
+      setTransactions(updated);
+    }
   };
 
-  const openTransactionForm = (date?: string, type?: 'income' | 'expense', group?: TransactionGroup) => {
+  const openTransactionForm = (
+    date?: string,
+    type?: 'income' | 'expense',
+    group?: TransactionGroup
+  ) => {
     setFormInitialDate(date || new Date().toISOString().split('T')[0]);
     setFormInitialType(type);
     setFormInitialGroup(group);
@@ -131,6 +212,7 @@ const App: React.FC = () => {
 
   const handleCloseForm = () => {
     setIsFormOpen(false);
+    // איפוס הערכים אחרי שהמודאל נסגר
     setTimeout(() => {
       setFormInitialDate(undefined);
       setFormInitialType(undefined);
@@ -139,19 +221,31 @@ const App: React.FC = () => {
   };
 
   const calculateCurrentBalance = () => {
-    const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-    const expenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const completed = transactions.filter((t) => t.status === 'completed');
+    const income = completed
+      .filter((t) => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const expenses = completed
+      .filter((t) => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+
     return initialBalance + income - expenses;
   };
 
+  // ------------------------------
+  // Auth Gate
+  // ------------------------------
   if (!currentUser) {
     return <Login onLogin={handleLogin} />;
   }
 
+  // ------------------------------
+  // Render
+  // ------------------------------
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      
-      {/* Sidebar */}
+      {/* Sidebar (Desktop) */}
       <aside className="fixed top-0 right-0 h-full w-64 bg-slate-900 text-white shadow-xl z-20 hidden md:flex flex-col">
         <div className="p-6 border-b border-slate-800 flex flex-col items-center justify-center py-8">
           <Logo />
@@ -160,43 +254,58 @@ const App: React.FC = () => {
             מחובר: {currentUser}
           </div>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-2 mt-2 overflow-y-auto">
-          <div className="text-xs text-slate-500 font-bold px-4 mb-2 mt-2">תזרים ובקרה</div>
-          <button 
+          <div className="text-xs text-slate-500 font-bold px-4 mb-2 mt-2">
+            תזרים ובקרה
+          </div>
+
+          <button
             onClick={() => setActiveTab('flow')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'flow' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              activeTab === 'flow'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
             <Table2 className="w-5 h-5" />
             תזרים חודשי
           </button>
-          <button 
+
+          <button
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              activeTab === 'dashboard'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
             <LayoutDashboard className="w-5 h-5" />
             לוח בקרה
           </button>
 
-          <div className="text-xs text-slate-500 font-bold px-4 mb-2 mt-6">ניהול משרד</div>
-          <button 
+          <div className="text-xs text-slate-500 font-bold px-4 mb-2 mt-6">
+            ניהול משרד
+          </div>
+
+          <button
             onClick={() => setActiveTab('summary')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'summary' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              activeTab === 'summary'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
             <FileText className="w-5 h-5" />
             תקציר מנהלים
           </button>
 
-           <button 
+          <button
             onClick={() => setActiveTab('collection')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'collection' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              activeTab === 'collection'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
             <Briefcase className="w-5 h-5" />
@@ -205,12 +314,7 @@ const App: React.FC = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-800 space-y-4">
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-            <p className="text-xs text-slate-400 mb-1">יתרה נוכחית</p>
-            <p className="text-xl font-bold text-[#d4af37]">{calculateCurrentBalance().toLocaleString()} ₪</p>
-          </div>
-          
-          <button 
+          <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/50 rounded-lg transition-colors text-sm"
           >
@@ -224,24 +328,44 @@ const App: React.FC = () => {
       <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 relative">
-             <svg viewBox="0 0 100 100" className="w-full h-full">
-                <path d="M25 20 V80 H75" fill="none" stroke="#d4af37" strokeWidth="10" strokeLinecap="square"/>
-                <path d="M25 20 H65 C75 20 80 30 80 40 C80 55 70 60 60 60 H25" fill="none" stroke="#94a3b8" strokeWidth="10" strokeLinecap="square" className="opacity-80"/>
-             </svg>
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <path
+                d="M25 20 V80 H75"
+                fill="none"
+                stroke="#d4af37"
+                strokeWidth="10"
+                strokeLinecap="square"
+              />
+              <path
+                d="M25 20 H65 C75 20 80 30 80 40 C80 55 70 60 60 60 H25"
+                fill="none"
+                stroke="#94a3b8"
+                strokeWidth="10"
+                strokeLinecap="square"
+                className="opacity-80"
+              />
+            </svg>
           </div>
-          <span className="font-bold text-[#d4af37] tracking-wide">LegalFlow</span>
+          <span className="font-bold text-[#d4af37] tracking-wide">
+            LegalFlow
+          </span>
         </div>
         <div className="flex items-center gap-4">
-            <div className="text-sm font-bold text-white">₪{calculateCurrentBalance().toLocaleString()}</div>
-            <button onClick={handleLogout} className="text-slate-400 hover:text-white">
-                <LogOut className="w-5 h-5" />
-            </button>
+          <div className="text-sm font-bold text-white">
+            ₪{calculateCurrentBalance().toLocaleString()}
+          </div>
+          <button
+            onClick={handleLogout}
+            className="text-slate-400 hover:text-white"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
       {/* Main Content */}
       <main className="md:mr-64 p-6 min-h-screen pb-24 md:pb-6">
-        {/* Top Action Bar */}
+        {/* Top Action Bar (למעט תזרים חודשי שבו יש action bar משלו) */}
         {activeTab !== 'flow' && (
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
             <div>
@@ -251,12 +375,17 @@ const App: React.FC = () => {
                 {activeTab === 'summary' && 'תקציר מנהלים'}
               </h2>
               <p className="text-slate-500 text-sm mt-1">
-                {new Date().toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                {new Date().toLocaleDateString('he-IL', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
               </p>
             </div>
-            
+
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={() => openTransactionForm()}
                 className="flex items-center gap-2 px-4 py-2 bg-[#d4af37] text-white rounded-lg hover:bg-[#b5952f] transition-all shadow-lg hover:shadow-xl text-sm font-medium"
               >
@@ -269,10 +398,10 @@ const App: React.FC = () => {
 
         {/* Views */}
         {activeTab === 'flow' && (
-          <MonthlyFlow 
+          <MonthlyFlow
             transactions={transactions}
             initialBalance={initialBalance}
-            onAddTransaction={handleAddTransaction} 
+            onAddTransaction={handleAddTransaction}
             onAddBatch={handleAddTransactionBatch}
             onDeleteTransaction={handleDeleteTransaction}
             openTransactionForm={openTransactionForm}
@@ -280,54 +409,120 @@ const App: React.FC = () => {
         )}
 
         {activeTab === 'dashboard' && (
-          <Dashboard 
-            transactions={transactions} 
-            currentBalance={calculateCurrentBalance()} 
+          <Dashboard
+            transactions={transactions}
+            initialBalance={initialBalance}
+            currentBalance={calculateCurrentBalance()}
+            onEditInitialBalance={() => setIsBalanceModalOpen(true)}
           />
         )}
 
         {activeTab === 'collection' && (
-            <CollectionTracker 
-                transactions={transactions}
-                onMarkAsPaid={handleMarkAsPaid}
-            />
+          <CollectionTracker
+            transactions={transactions}
+            onMarkAsPaid={handleMarkAsPaid}
+          />
         )}
 
         {activeTab === 'summary' && (
-            <ExecutiveSummary transactions={transactions} />
+          <ExecutiveSummary transactions={transactions} />
         )}
       </main>
 
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 safe-area-pb">
-        <button onClick={() => setActiveTab('flow')} className={`flex flex-col items-center gap-1 ${activeTab === 'flow' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+        <button
+          onClick={() => setActiveTab('flow')}
+          className={`flex flex-col items-center gap-1 ${
+            activeTab === 'flow' ? 'text-[#d4af37]' : 'text-slate-400'
+          }`}
+        >
           <Table2 className="w-6 h-6" />
           <span className="text-[10px]">תזרים</span>
         </button>
-        <button onClick={() => setActiveTab('collection')} className={`flex flex-col items-center gap-1 ${activeTab === 'collection' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+
+        <button
+          onClick={() => setActiveTab('collection')}
+          className={`flex flex-col items-center gap-1 ${
+            activeTab === 'collection' ? 'text-[#d4af37]' : 'text-slate-400'
+          }`}
+        >
           <Briefcase className="w-6 h-6" />
           <span className="text-[10px]">גבייה</span>
         </button>
-        <button onClick={() => openTransactionForm()} className="flex flex-col items-center justify-center -mt-8">
+
+        <button
+          onClick={() => openTransactionForm()}
+          className="flex flex-col items-center justify-center -mt-8"
+        >
           <div className="bg-slate-900 p-3 rounded-full shadow-lg text-[#d4af37] border-2 border-[#d4af37]">
             <Plus className="w-6 h-6" />
           </div>
         </button>
-        <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 ${activeTab === 'summary' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+
+        <button
+          onClick={() => setActiveTab('summary')}
+          className={`flex flex-col items-center gap-1 ${
+            activeTab === 'summary' ? 'text-[#d4af37]' : 'text-slate-400'
+          }`}
+        >
           <FileText className="w-6 h-6" />
           <span className="text-[10px]">מנהלים</span>
         </button>
       </div>
 
-      <TransactionForm 
-        isOpen={isFormOpen} 
-        onClose={handleCloseForm} 
-        onSubmit={handleAddTransactionBatch} 
+      {/* Transaction Form Modal */}
+      <TransactionForm
+        isOpen={isFormOpen}
+        onClose={handleCloseForm}
+        onSubmit={handleAddTransactionBatch}
         initialDate={formInitialDate}
         initialType={formInitialType}
         initialGroup={formInitialGroup}
       />
 
+      {isBalanceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/70 backdrop-blur-sm p-4 pt-20">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200">
+            <div className="p-6 border-b border-slate-100">
+              <h3 className="text-xl font-bold text-slate-800">עדכון יתרת פתיחה</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                הגדר/י את יתרת הפתיחה ממנה יחושבו כל היתרות בדוחות.
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              <label className="text-sm font-medium text-slate-700">
+                סכום פתיחה (₪)
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="-?[0-9]*([.,][0-9]*)?"
+                  value={balanceDraft}
+                  onChange={handleBalanceDraftChange}
+                  className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <p className="text-xs text-slate-500">
+                ניתן לעדכן ערך זה בכל עת. התזרים יחושב מחדש אוטומטית.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                onClick={() => setIsBalanceModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
+              >
+                ביטול
+              </button>
+              <button
+                onClick={handleSaveInitialBalance}
+                className="px-5 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800"
+              >
+                שמור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

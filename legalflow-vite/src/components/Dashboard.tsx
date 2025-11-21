@@ -16,11 +16,17 @@ interface DashboardProps {
   transactions: Transaction[];
   initialBalance: number;
   currentBalance: number;
+  onEditInitialBalance: () => void;
 }
 
 const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, currentBalance }) => {
+const Dashboard: React.FC<DashboardProps> = ({
+  transactions,
+  initialBalance,
+  currentBalance,
+  onEditInitialBalance,
+}) => {
   const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const today = useMemo(() => new Date(), []);
   const startOfMonth = useMemo(
@@ -185,17 +191,36 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
     );
   }, [cashflowRows]);
 
-  const operationalProfit = useMemo(
-    () => totalsByGroup.fee - totalsByGroup.operational,
-    [totalsByGroup]
+  const profitMetrics = useMemo(() => {
+    return monthTransactions.reduce(
+      (acc, transaction) => {
+        if (transaction.type === 'income') {
+          acc.totalIncome += transaction.amount;
+        } else if (transaction.type === 'expense') {
+          if (transaction.group === 'tax') {
+            acc.totalTaxExpenses += transaction.amount;
+          } else {
+            acc.totalNonTaxExpenses += transaction.amount;
+          }
+        }
+        return acc;
+      },
+      {
+        totalIncome: 0,
+        totalNonTaxExpenses: 0,
+        totalTaxExpenses: 0,
+      }
+    );
+  }, [monthTransactions]);
+
+  const operatingProfit = useMemo(
+    () => profitMetrics.totalIncome - profitMetrics.totalNonTaxExpenses,
+    [profitMetrics]
   );
 
   const netProfit = useMemo(
-    () =>
-      totalsByGroup.fee +
-      totalsByGroup.otherIncome -
-      (totalsByGroup.operational + totalsByGroup.taxes),
-    [totalsByGroup]
+    () => operatingProfit - profitMetrics.totalTaxExpenses,
+    [operatingProfit, profitMetrics.totalTaxExpenses]
   );
 
   // --- Calculations ---
@@ -305,8 +330,44 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
+        <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+          <div>
+            <p className="text-sm text-slate-500 font-medium">יתרה נוכחית</p>
+            <p className="text-3xl font-bold text-slate-900 mt-1">
+              ₪{currentBalance.toLocaleString()}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              יתרה לפי דוח: ₪{(flowCurrentBalance || 0).toLocaleString()} · יתרת פתיחה: ₪{monthStartBalance.toLocaleString()}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={onEditInitialBalance}
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg shadow-sm hover:bg-slate-800 transition-colors"
+            >
+              עדכן יתרת פתיחה
+            </button>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between gap-4 lg:w-[320px]">
+          <div>
+            <p className="text-sm font-medium text-slate-500 mb-1">ניתוח שכר טרחה</p>
+            <p className="text-base text-slate-600">
+              עקוב אחר תרומת לקוחות מיוחדים לשכר הטרחה בתאריכים נבחרים.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsFeeSummaryOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-500 transition-colors"
+          >
+            סיכום שכר טרחה לפי סוג לקוח
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
       {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
         <KPICard 
           title="יתרה נוכחית" 
           value={flowCurrentBalance || currentBalance} 
@@ -333,19 +394,31 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
           icon={Scale} 
           colorClass="bg-purple-600"
         />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <KPICard 
-          title="רווח תפעולי"
-          value={operationalProfit}
+          title="רווח תפעולי" 
+          value={operatingProfit}
           icon={Activity}
           colorClass="bg-indigo-600"
         />
         <KPICard 
-          title="רווח נטו"
+          title="רווח נטו" 
           value={netProfit}
           icon={Scale}
           colorClass="bg-slate-700"
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
+        <KPICard 
+          title={'סה"כ שכר טרחה'}
+          value={totalsByGroup.fee}
+          icon={TrendingUp}
+          colorClass="bg-emerald-600/80"
+        />
+        <KPICard 
+          title={'סה"כ הכנסות אחרות'}
+          value={totalsByGroup.otherIncome}
+          icon={TrendingUp}
+          colorClass="bg-teal-600"
         />
         <KPICard 
           title={'סה"כ הוצאות'}
@@ -373,16 +446,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
         />
       </div>
 
-      {/* Charts Row */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => setIsFeeSummaryOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg shadow-sm hover:bg-slate-800 transition-colors"
-        >
-          סיכום שכר טרחה
-          <Download className="w-4 h-4" />
-        </button>
-      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Trend Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-100">

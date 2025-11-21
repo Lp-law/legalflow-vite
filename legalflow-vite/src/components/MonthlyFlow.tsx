@@ -35,6 +35,20 @@ type MonthSummary = {
   bankAdjustmentPending: number;
 };
 
+const formatSignedCurrency = (value: number) => {
+  const normalized = Math.abs(value).toLocaleString();
+  const sign = value < 0 ? '-' : '';
+  return `${sign}₪${normalized}`;
+};
+
+const getSignedAmountForTooltip = (transaction: Transaction, group: TransactionGroup) => {
+  if (group === 'bank_adjustment') {
+    return transaction.amount;
+  }
+  const baseAmount = Math.abs(transaction.amount);
+  return transaction.type === 'expense' ? -baseAmount : baseAmount;
+};
+
 const MonthlyFlow: React.FC<MonthlyFlowProps> = ({ 
   transactions, 
   initialBalance, 
@@ -58,6 +72,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     y: number;
     title: string;
     total: number;
+    group: TransactionGroup | null;
     transactions: Transaction[];
   }>({
     visible: false,
@@ -65,6 +80,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     y: 0,
     title: '',
     total: 0,
+    group: null,
     transactions: [],
   });
 
@@ -384,8 +400,10 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   const showCellTooltip = (
     event: React.MouseEvent<HTMLTableCellElement, MouseEvent>,
     title: string,
+    group: TransactionGroup,
     data: { transactions: Transaction[]; sum: number }
   ) => {
+    if (!data.transactions.length) return;
     const { clientX, clientY } = event;
     setCellTooltip({
       visible: true,
@@ -393,6 +411,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
       y: clientY + 16,
       title,
       total: data.sum,
+       group,
       transactions: data.transactions,
     });
   };
@@ -408,7 +427,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   };
 
   const hideCellTooltip = () => {
-    setCellTooltip(prev => ({ ...prev, visible: false }));
+    setCellTooltip(prev => ({ ...prev, visible: false, transactions: [] }));
   };
 
   // --- Render ---
@@ -513,7 +532,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* FEE CELL */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'fee', day.fee.transactions)}
-                                    onMouseEnter={(e) => showCellTooltip(e, 'שכר טרחה', day.fee)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'שכר טרחה', 'fee', day.fee)}
                                     onMouseMove={moveCellTooltip}
                                     onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 relative hover:bg-slate-100 bg-emerald-50/30"
@@ -543,7 +562,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* OTHER INCOME CELL */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'other_income', day.otherIncome.transactions)}
-                                    onMouseEnter={(e) => showCellTooltip(e, 'הכנסות אחרות', day.otherIncome)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'הכנסות אחרות', 'other_income', day.otherIncome)}
                                     onMouseMove={moveCellTooltip}
                                     onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
@@ -573,7 +592,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* OPERATIONAL */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'operational', day.operational.transactions)}
-                                    onMouseEnter={(e) => showCellTooltip(e, 'הוצאות תפעול', day.operational)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'הוצאות תפעול', 'operational', day.operational)}
                                     onMouseMove={moveCellTooltip}
                                     onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
@@ -592,7 +611,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* TAX */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'tax', day.tax.transactions)}
-                                    onMouseEnter={(e) => showCellTooltip(e, 'מיסים', day.tax)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'מיסים', 'tax', day.tax)}
                                     onMouseMove={moveCellTooltip}
                                     onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
@@ -611,7 +630,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* LOAN */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'loan', day.loan.transactions)}
-                                    onMouseEnter={(e) => showCellTooltip(e, 'הלוואות', day.loan)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'הלוואות', 'loan', day.loan)}
                                     onMouseMove={moveCellTooltip}
                                     onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
@@ -630,7 +649,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* PERSONAL */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'personal', day.personal.transactions)}
-                                    onMouseEnter={(e) => showCellTooltip(e, 'משיכות', day.personal)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'משיכות', 'personal', day.personal)}
                                     onMouseMove={moveCellTooltip}
                                     onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
@@ -649,7 +668,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* BANK ADJUSTMENT */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'bank_adjustment', day.bankAdjustment.transactions)}
-                                    onMouseEnter={(e) => showCellTooltip(e, 'התאמות בנק', day.bankAdjustment)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'התאמות בנק', 'bank_adjustment', day.bankAdjustment)}
                                     onMouseMove={moveCellTooltip}
                                     onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
@@ -801,6 +820,14 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
           const viewportHeight = typeof window === 'undefined' ? 0 : window.innerHeight;
           const maxTop = viewportHeight ? viewportHeight - 150 : cellTooltip.y;
           const maxLeft = viewportWidth ? viewportWidth - 260 : cellTooltip.x;
+          const signedSum =
+            cellTooltip.group && cellTooltip.transactions.length
+              ? cellTooltip.transactions.reduce(
+                  (sum, transaction) =>
+                    sum + getSignedAmountForTooltip(transaction, cellTooltip.group as TransactionGroup),
+                  0
+                )
+              : 0;
           return (
         <div
           className="fixed z-[60] pointer-events-none"
@@ -819,16 +846,40 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
               <ul className="space-y-1 text-xs text-slate-600">
                 {cellTooltip.transactions.map((transaction) => (
                   <li key={transaction.id} className="flex justify-between gap-2">
-                    <span className="truncate">{transaction.description || transaction.category || 'ללא תיאור'}</span>
-                    <span className="font-semibold text-slate-800">
-                      ₪{transaction.amount.toLocaleString()}
+                    <div className="truncate">
+                      <span className="font-semibold text-slate-800 block truncate">
+                        {transaction.description || 'ללא תיאור'}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        {transaction.category || 'ללא קטגוריה'} ·{' '}
+                        {transaction.status === 'pending' ? 'צפוי' : 'שולם'}
+                      </span>
+                    </div>
+                    <span
+                      className={`font-semibold text-right ${
+                        cellTooltip.group &&
+                        getSignedAmountForTooltip(transaction, cellTooltip.group) >= 0
+                          ? 'text-emerald-600'
+                          : 'text-rose-600'
+                      }`}
+                    >
+                      {cellTooltip.group
+                        ? formatSignedCurrency(getSignedAmountForTooltip(transaction, cellTooltip.group))
+                        : `₪${transaction.amount.toLocaleString()}`}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
             <div className="mt-2 text-xs font-bold text-slate-900 border-t border-slate-100 pt-2">
-              סה"כ: ₪{cellTooltip.total.toLocaleString()}
+              <div className="flex flex-col gap-1">
+                <span>סה"כ בתא: ₪{cellTooltip.total.toLocaleString()}</span>
+                {cellTooltip.group && (
+                  <span className="text-[11px] font-normal text-slate-500">
+                    השפעה על תזרים: {formatSignedCurrency(signedSum)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>

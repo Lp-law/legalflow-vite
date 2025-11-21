@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { X, Calendar } from 'lucide-react';
-import type { Transaction } from '../types';
+import { Transaction } from '../types';
 import { formatDateKey, parseDateKey } from '../utils/date';
 
 const SPECIAL_CLIENTS = [
@@ -8,8 +8,8 @@ const SPECIAL_CLIENTS = [
   { id: 'terem_retainer', label: 'טרם ריטיינר', tokens: ['טרם ריטיינר', 'terem retainer'] },
   { id: 'terem_hourly', label: 'טרם שעתי', tokens: ['טרם שעתי', 'terem hourly'] },
   { id: 'mar', label: 'מ.א.ר', tokens: ['מ.א.ר', 'מאר', 'mar'] },
-  { id: 'mda', label: 'מד"א', tokens: ['מד"א', 'מדא', 'מדה', 'mda'] },
-  { id: 'private_med_mal', label: 'רשלנות רפואית פרטי', tokens: ['רשלנות רפואית פרטי', 'private med mal', 'med mal'] },
+  { id: 'mda', label: 'מד"א', tokens: ['מד"א', 'מדא', 'mda'] },
+  { id: 'private_med_mal', label: 'רשלנות רפואית פרטי', tokens: ['רשלנות רפואית פרטי', 'med mal', 'private med mal'] },
 ] as const;
 
 type SpecialClientId = (typeof SPECIAL_CLIENTS)[number]['id'];
@@ -22,16 +22,14 @@ interface FeeSummaryModalProps {
 }
 
 const normalize = (value?: string | null) =>
-  (value || '')
-    .toLowerCase()
-    .replace(/[\s"'\-_.]/g, '');
+  (value || '').toLowerCase().replace(/[\s"'\-_.]/g, '');
 
-const resolveBucket = (description: string | undefined): ClientBucket => {
+const resolveBucket = (description?: string): ClientBucket => {
   const normalizedDescription = normalize(description);
-  const match = SPECIAL_CLIENTS.find(client =>
+  const matched = SPECIAL_CLIENTS.find(client =>
     client.tokens.some(token => normalizedDescription.includes(normalize(token)))
   );
-  return match ? match.id : 'other_clients';
+  return matched ? matched.id : 'other_clients';
 };
 
 const FeeSummaryModal: React.FC<FeeSummaryModalProps> = ({
@@ -62,11 +60,7 @@ const FeeSummaryModal: React.FC<FeeSummaryModalProps> = ({
     let totalIncome = 0;
 
     transactions
-      .filter(
-        t =>
-          t.group === 'fee' &&
-          t.type === 'income'
-      )
+      .filter(t => t.type === 'income' && t.group === 'fee')
       .forEach(transaction => {
         const date = parseDateKey(transaction.date);
         if (date.getTime() < start.getTime() || date.getTime() > end.getTime()) {
@@ -210,7 +204,7 @@ const FeeSummaryModal: React.FC<FeeSummaryModalProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {bucket.transactions.map((transaction) => (
+                        {bucket.transactions.map(transaction => (
                           <tr key={transaction.id} className="hover:bg-slate-50">
                             <td className="px-4 py-2 text-slate-600">
                               {parseDateKey(transaction.date).toLocaleDateString('he-IL')}

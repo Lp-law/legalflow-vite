@@ -12,8 +12,11 @@ interface CollectionTrackerProps {
 const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onMarkAsPaid }) => {
   
   const isExpenseReimbursement = (transaction: Transaction) => {
-    if (transaction.group === 'other_income') return true;
-    return (transaction.category || '').includes('החזר');
+    if (transaction.group !== 'other_income') return false;
+    const normalized = `${transaction.category || ''} ${transaction.description || ''}`
+      .replace(/\s+/g, '')
+      .toLowerCase();
+    return normalized.includes('החזר') || normalized.includes('reimburse');
   };
 
   const pendingItems = useMemo(() => {
@@ -190,6 +193,16 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
                 })
               )}
             </tbody>
+            {pendingItems.length > 0 && (
+              <tfoot className="bg-slate-50 text-slate-700 font-semibold">
+                <tr>
+                  <td colSpan={3} className="px-6 py-4 text-right">סה"כ לתשלום</td>
+                  <td className="px-6 py-4">₪{totalFeeDue.toLocaleString()}</td>
+                  <td className="px-6 py-4">₪{totalReimbursementDue.toLocaleString()}</td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

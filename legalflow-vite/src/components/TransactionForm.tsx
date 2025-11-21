@@ -133,7 +133,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       setAmount(selectedCat.defaultAmount.toString());
       setIsAmountManual(false);
     }
-    if (selectedCat.defaultDay !== undefined) {
+    if (!isLoanCategory && selectedCat.defaultDay !== undefined) {
       const currentDateObj = new Date(date);
       const year = currentDateObj.getFullYear();
       const month = currentDateObj.getMonth();

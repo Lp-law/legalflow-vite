@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Upload } from 'lucide-react';
 import type { Transaction, TransactionGroup } from './types';
-import { getTransactions, saveTransactions, getInitialBalance, saveInitialBalance, exportBackupJSON, applyLoanOverrides, rememberLoanOverride, removeLoanOverride } from './services/storageService';
+import { getTransactions, saveTransactions, getInitialBalance, saveInitialBalance, exportBackupJSON, applyLoanOverrides, rememberLoanOverride, removeLoanOverride, replaceClients, replaceCustomCategories } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
 import { syncTaxTransactions } from './services/taxService';
 import TransactionForm from './components/TransactionForm';
@@ -71,6 +71,8 @@ const App: React.FC = () => {
   const isRestoringFromCloud = useRef(false);
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
   const [balanceDraft, setBalanceDraft] = useState(() => getInitialBalance().toString());
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importFeedback, setImportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // --- Persistence ---
   useEffect(() => {
@@ -222,8 +224,8 @@ const App: React.FC = () => {
     });
 
     if (didUpdate) {
-      updateTransactionsWithSync(updatedList);
       rememberLoanOverride(transactionId, normalizedAmount);
+      updateTransactionsWithSync(updatedList);
     }
   };
 
@@ -298,6 +300,12 @@ const App: React.FC = () => {
     setBalanceDraft(initialBalance.toString());
   }, [initialBalance]);
 
+  useEffect(() => {
+    if (!importFeedback) return;
+    const timeout = setTimeout(() => setImportFeedback(null), 6000);
+    return () => clearTimeout(timeout);
+  }, [importFeedback]);
+
   const handleBalanceDraftChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = event.target;
     if (DECIMAL_INPUT_PATTERN.test(value)) {
@@ -312,6 +320,76 @@ const App: React.FC = () => {
     setInitialBalance(normalized);
     saveInitialBalance(normalized);
     setIsBalanceModalOpen(false);
+  };
+
+  const runTransactionsImport = (rawTransactions: unknown) => {
+    if (!Array.isArray(rawTransactions)) {
+      throw new Error('קובץ הגיבוי אינו מכיל רשימת תנועות חוקית');
+    }
+    updateTransactionsWithSync(rawTransactions as Transaction[]);
+  };
+
+  const applyBackupPayload = (payload: unknown) => {
+    if (Array.isArray(payload)) {
+      runTransactionsImport(payload);
+      return;
+    }
+
+    if (payload && typeof payload === 'object') {
+      const backup = payload as {
+        transactions?: unknown;
+        initialBalance?: unknown;
+        clients?: unknown;
+        customCategories?: unknown;
+      };
+
+      if (!Array.isArray(backup.transactions)) {
+        throw new Error('קובץ הגיבוי אינו מכיל תנועות תקינות');
+      }
+
+      runTransactionsImport(backup.transactions);
+
+      if (typeof backup.initialBalance === 'number' && Number.isFinite(backup.initialBalance)) {
+        setInitialBalance(backup.initialBalance);
+        saveInitialBalance(backup.initialBalance);
+      }
+
+      if (Array.isArray(backup.clients)) {
+        replaceClients(backup.clients);
+      }
+
+      if (Array.isArray(backup.customCategories)) {
+        replaceCustomCategories(backup.customCategories);
+      }
+
+      return;
+    }
+
+    throw new Error('קובץ הגיבוי אינו בפורמט נתמך');
+  };
+
+  const handleBackupFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      applyBackupPayload(parsed);
+      setImportFeedback({ type: 'success', message: 'ייבוא הגיבוי הושלם בהצלחה' });
+    } catch (error) {
+      console.error('Backup import failed', error);
+      setImportFeedback({
+        type: 'error',
+        message: 'קובץ הגיבוי אינו חוקי או שאינו תואם ל-LegalFlow',
+      });
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleImportButtonClick = () => {
+    fileInputRef.current?.click();
   };
 
   if (!currentUser) {
@@ -375,22 +453,24 @@ const App: React.FC = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-800 space-y-4">
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-            <p className="text-xs text-slate-400 mb-1">יתרה נוכחית</p>
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-xl font-bold text-[#d4af37]">{calculateCurrentBalance().toLocaleString()} ₪</p>
-              <button
-                onClick={() => setIsBalanceModalOpen(true)}
-                className="text-xs text-slate-300 hover:text-white underline underline-offset-4"
-              >
-                עדכן יתרת פתיחה
-              </button>
+          <button
+            onClick={handleImportButtonClick}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
+          >
+            <Upload className="w-4 h-4" />
+            ייבוא גיבוי
+          </button>
+          {importFeedback && (
+            <div
+              className={`text-xs px-3 py-2 rounded-lg border ${
+                importFeedback.type === 'success'
+                  ? 'border-emerald-300 text-emerald-200 bg-emerald-500/10'
+                  : 'border-red-300 text-red-200 bg-red-500/10'
+              }`}
+            >
+              {importFeedback.message}
             </div>
-            <p className="text-[11px] text-slate-500">
-              יתרת פתיחה: ₪{initialBalance.toLocaleString()}
-            </p>
-          </div>
-          
+          )}
           <button 
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/50 rounded-lg transition-colors text-sm"
@@ -475,7 +555,8 @@ const App: React.FC = () => {
             <Dashboard 
               transactions={transactions} 
               initialBalance={initialBalance}
-              currentBalance={calculateCurrentBalance()} 
+              currentBalance={calculateCurrentBalance()}
+              onEditInitialBalance={() => setIsBalanceModalOpen(true)}
             />
           )}
 
@@ -564,6 +645,14 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json"
+        className="hidden"
+        onChange={handleBackupFileChange}
+      />
 
     </div>
   );

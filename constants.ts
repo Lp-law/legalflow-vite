@@ -32,10 +32,10 @@ export const CATEGORIES: Category[] = [
   { id: 't4', name: 'ביטוח לאומי עובדים', type: 'expense', group: 'tax', color: '#ef4444' },
   { id: 't5', name: 'ביטוח לאומי אישי', type: 'expense', group: 'tax', color: '#f87171' },
   
-  // Loans
-  { id: 'l1', name: 'מימון ישיר', type: 'expense', group: 'loan', color: '#ea580c', defaultAmount: 1868, defaultDay: 2 },
-  { id: 'l2', name: 'פועלים', type: 'expense', group: 'loan', color: '#c2410c', defaultAmount: 2990, defaultDay: 20 },
-  { id: 'l3', name: 'משכנתא', type: 'expense', group: 'loan', color: '#9a3412', defaultAmount: 5400, defaultDay: 15 },
+  // Loans (no defaultAmount!)
+  { id: 'l1', name: 'החזר הלוואה מימון ישיר', type: 'expense', group: 'loan', color: '#ea580c' },
+  { id: 'l2', name: 'החזר הלוואה פועלים', type: 'expense', group: 'loan', color: '#c2410c' },
+  { id: 'l3', name: 'החזר משכנתא', type: 'expense', group: 'loan', color: '#9a3412' },
 
   // Personal
   { id: 'w1', name: 'משיכה פרטית', type: 'expense', group: 'personal', color: '#a855f7' },
@@ -45,13 +45,14 @@ export const CATEGORIES: Category[] = [
 
 export const INITIAL_CLIENTS = [
   "שור",
-  "טרם",
   "לוידס",
   "פלג אורייון",
   "טר ארמה",
   "מ.א.ר",
-  "מד\"א",
-  "היימן"
+  "מד"א",
+  "היימן",
+  "טרם ריטיינר",
+  "טרם שעתי"
 ];
 
 export const PAYMENT_METHODS = [

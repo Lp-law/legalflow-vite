@@ -6,13 +6,44 @@ const STORAGE_KEY_INITIAL_BALANCE = 'legalflow_initial_balance_v2';
 const STORAGE_KEY_CUSTOM_CATEGORIES = 'legalflow_custom_categories_v2';
 const STORAGE_KEY_CLIENTS = 'legalflow_clients_v1';
 const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
+const LEGACY_LOAN_CATEGORY_NAMES = new Set(['מימון ישיר', 'פועלים', 'משכנתא']);
+const LEGACY_CLIENT_NAME = 'טרם';
+const REQUIRED_TEREM_CLIENTS = ['טרם ריטיינר', 'טרם שעתי'];
 
 export const getTransactions = (): Transaction[] => {
   const stored = localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
-  if (stored) {
-    return JSON.parse(stored);
+  if (!stored) {
+    return INITIAL_TRANSACTIONS;
   }
-  return INITIAL_TRANSACTIONS;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stored);
+  } catch {
+    return INITIAL_TRANSACTIONS;
+  }
+
+  if (!Array.isArray(parsed)) {
+    return INITIAL_TRANSACTIONS;
+  }
+
+  const cleaned = parsed.filter(transaction => {
+    if (!transaction || typeof transaction !== 'object') {
+      return true;
+    }
+    const group = (transaction as { group?: string }).group;
+    const category = (transaction as { category?: string }).category;
+    if (group === 'loan' && typeof category === 'string' && LEGACY_LOAN_CATEGORY_NAMES.has(category)) {
+      return false;
+    }
+    return true;
+  }) as Transaction[];
+
+  if (cleaned.length !== parsed.length) {
+    localStorage.setItem(STORAGE_KEY_TRANSACTIONS, JSON.stringify(cleaned));
+  }
+
+  return cleaned;
 };
 
 export const saveTransactions = (transactions: Transaction[]) => {
@@ -39,6 +70,11 @@ export const getCustomCategories = () => {
         return JSON.parse(stored);
     }
     return [];
+};
+
+export const replaceCustomCategories = (categories: unknown) => {
+  const safeList = Array.isArray(categories) ? categories : [];
+  localStorage.setItem(STORAGE_KEY_CUSTOM_CATEGORIES, JSON.stringify(safeList));
 };
 
 export const saveCustomCategory = (newCategoryName: string, type: 'income' | 'expense', specificGroup?: string) => {
@@ -142,12 +178,69 @@ export const applyLoanOverrides = (transactions: Transaction[]): Transaction[] =
 
 // --- Clients Logic ---
 
-export const getClients = (): string[] => {
-    const stored = localStorage.getItem(STORAGE_KEY_CLIENTS);
-    if (stored) {
-        return JSON.parse(stored);
+const normalizeRawClientList = (input: unknown): string[] => {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  input.forEach(entry => {
+    if (typeof entry !== 'string') return;
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    normalized.push(trimmed);
+    seen.add(trimmed);
+  });
+
+  return normalized;
+};
+
+const sanitizeClientList = (input: unknown): string[] => {
+  const sourceArray = normalizeRawClientList(input);
+  const seen = new Set<string>();
+  const sanitized: string[] = [];
+
+  sourceArray.forEach(entry => {
+    if (entry === LEGACY_CLIENT_NAME) return;
+    if (seen.has(entry)) return;
+    sanitized.push(entry);
+    seen.add(entry);
+  });
+
+  REQUIRED_TEREM_CLIENTS.forEach(clientName => {
+    if (!seen.has(clientName)) {
+      sanitized.push(clientName);
+      seen.add(clientName);
     }
-    return INITIAL_CLIENTS;
+  });
+
+  return sanitized;
+};
+
+const writeClientsIfChanged = (currentRaw: unknown, sanitized: string[]) => {
+  const normalizedOriginal = normalizeRawClientList(currentRaw);
+  if (
+    normalizedOriginal.length !== sanitized.length ||
+    normalizedOriginal.some((name, idx) => name !== sanitized[idx])
+  ) {
+    localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(sanitized));
+  }
+};
+
+export const getClients = (): string[] => {
+  const stored = localStorage.getItem(STORAGE_KEY_CLIENTS);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      const sanitized = sanitizeClientList(parsed);
+      writeClientsIfChanged(parsed, sanitized);
+      return sanitized;
+    } catch {
+      // Fall through to defaults
+    }
+  }
+
+  const sanitizedDefaults = sanitizeClientList(INITIAL_CLIENTS);
+  return sanitizedDefaults;
 };
 
 export const saveClient = (newClientName: string) => {
@@ -158,6 +251,11 @@ export const saveClient = (newClientName: string) => {
         return updated;
     }
     return current;
+};
+
+export const replaceClients = (nextClients: unknown) => {
+  const sanitized = sanitizeClientList(nextClients);
+  localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(sanitized));
 };
 
 // --- Backup Logic ---
