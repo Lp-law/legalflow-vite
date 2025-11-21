@@ -1,64 +1,97 @@
-import { createClient } from '@supabase/supabase-js';
-import type { Transaction } from '../types';
+import type { Transaction, Category } from '../types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const API_BASE_URL = (import.meta.env.VITE_LEGALFLOW_API_URL || '').replace(/\/$/, '');
 
-const TABLE_NAME = 'legalflow_state';
+const ensureApiBaseUrl = () => {
+  if (!API_BASE_URL) {
+    throw new Error('חסר משתנה סביבה VITE_LEGALFLOW_API_URL');
+  }
 
-const supabase =
-  supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey)
-    : null;
+  return API_BASE_URL;
+};
+
+const parseResponse = async <T>(response: Response): Promise<T> => {
+  const text = await response.text();
+  const data = text ? (JSON.parse(text) as T & { error?: string }) : ({} as T);
+
+  if (!response.ok) {
+    const message = (data as { error?: string }).error || response.statusText || 'שגיאה בשרת';
+    throw new Error(message);
+  }
+
+  return data as T;
+};
+
+const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
+  const baseUrl = ensureApiBaseUrl();
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+
+  return parseResponse<T>(response);
+};
+
+const authorizedRequest = async <T>(
+  path: string,
+  token: string,
+  options: RequestInit = {}
+): Promise<T> => {
+  if (!token) {
+    throw new Error('Missing auth token');
+  }
+
+  return request<T>(path, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {}),
+    },
+  });
+};
 
 export interface CloudSnapshot {
   transactions: Transaction[];
   initialBalance: number;
+  clients: string[];
+  customCategories: Category[];
+  loanOverrides: Record<string, number>;
   updatedAt: string;
 }
 
-export const fetchCloudSnapshot = async (
-  userId: string
-): Promise<CloudSnapshot | null> => {
-  if (!supabase) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from(TABLE_NAME)
-    .select('user_id,data,updated_at')
-    .eq('user_id', userId)
-    .single();
-
-  if (error || !data) {
-    return null;
-  }
-
-  return {
-    transactions: data.data?.transactions ?? [],
-    initialBalance: data.data?.initialBalance ?? 0,
-    updatedAt: data.updated_at,
+export interface AuthSuccess {
+  token: string;
+  user: {
+    username: string;
+    role: string;
   };
+}
+
+export const login = (username: string, password: string) =>
+  request<AuthSuccess>('/api/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+
+export const fetchCloudSnapshot = async (token: string): Promise<CloudSnapshot | null> => {
+  if (!token) {
+    return null;
+  }
+
+  return authorizedRequest<CloudSnapshot>('/api/v1/state', token);
 };
 
-export const persistCloudSnapshot = async (
-  userId: string,
-  payload: CloudSnapshot
-) => {
-  if (!supabase) {
+export const persistCloudSnapshot = async (token: string, payload: CloudSnapshot) => {
+  if (!token) {
     return;
   }
 
-  await supabase.from(TABLE_NAME).upsert(
-    {
-      user_id: userId,
-      data: {
-        transactions: payload.transactions,
-        initialBalance: payload.initialBalance,
-      },
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' }
-  );
+  await authorizedRequest('/api/v1/state', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 };
 

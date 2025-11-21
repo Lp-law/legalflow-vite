@@ -1,7 +1,23 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Upload, Menu } from 'lucide-react';
 import type { Transaction, TransactionGroup } from './types';
-import { getTransactions, saveTransactions, getInitialBalance, saveInitialBalance, exportBackupJSON, applyLoanOverrides, rememberLoanOverride, removeLoanOverride, replaceClients, replaceCustomCategories } from './services/storageService';
+import {
+  getTransactions,
+  saveTransactions,
+  getInitialBalance,
+  saveInitialBalance,
+  exportBackupJSON,
+  applyLoanOverrides,
+  rememberLoanOverride,
+  removeLoanOverride,
+  replaceClients,
+  replaceCustomCategories,
+  getClients,
+  getCustomCategories,
+  getLoanOverrides,
+  replaceLoanOverrides,
+  STORAGE_EVENT,
+} from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
 import { syncTaxTransactions } from './services/taxService';
 import TransactionForm from './components/TransactionForm';
@@ -48,7 +64,12 @@ const DECIMAL_INPUT_PATTERN = /^-?\d*(?:[.,]\d*)?$/;
 
 const App: React.FC = () => {
   // Auth State
-  const [currentUser, setCurrentUser] = useState<string | null>(() => sessionStorage.getItem('legalflow_user'));
+  const [currentUser, setCurrentUser] = useState<string | null>(() =>
+    sessionStorage.getItem('legalflow_user')
+  );
+  const [authToken, setAuthToken] = useState<string | null>(() =>
+    sessionStorage.getItem('legalflow_token')
+  );
   
   // App State - Lazy initialization ensures we read from storage on first render before any overwrites
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
@@ -74,6 +95,7 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importFeedback, setImportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
+  const [storageSyncVersion, setStorageSyncVersion] = useState(0);
 
   // --- Persistence ---
   useEffect(() => {
@@ -81,6 +103,19 @@ const App: React.FC = () => {
      // Note: The sync logic is handled inside the update handlers to avoid infinite loops in useEffect
      saveTransactions(transactions);
   }, [transactions]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleStorageSync = () => {
+      setStorageSyncVersion(prev => prev + 1);
+    };
+
+    window.addEventListener(STORAGE_EVENT, handleStorageSync);
+    return () => window.removeEventListener(STORAGE_EVENT, handleStorageSync);
+  }, []);
 
   // --- 3-Hour Automatic Backup ---
   useEffect(() => {
@@ -121,14 +156,18 @@ const App: React.FC = () => {
 
   // --- Handlers ---
 
-  const handleLogin = (username: string) => {
+  const handleLogin = ({ username, token }: { username: string; token: string }) => {
     setCurrentUser(username);
+    setAuthToken(token);
     sessionStorage.setItem('legalflow_user', username);
+    sessionStorage.setItem('legalflow_token', token);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setAuthToken(null);
     sessionStorage.removeItem('legalflow_user');
+    sessionStorage.removeItem('legalflow_token');
     sessionStorage.removeItem('legalflow_daily_email_sent');
   };
 
@@ -267,35 +306,54 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !authToken) return;
     let cancelled = false;
 
     (async () => {
-      const snapshot = await fetchCloudSnapshot(currentUser);
-      if (!snapshot || cancelled) return;
+      try {
+        const snapshot = await fetchCloudSnapshot(authToken);
+        if (!snapshot || cancelled) return;
 
-      isRestoringFromCloud.current = true;
-      setInitialBalance(snapshot.initialBalance ?? getInitialBalance());
-      const sanitizedSnapshot = sanitizeTransactions(snapshot.transactions ?? []);
-      const withOverrides = applyLoanOverrides(sanitizedSnapshot);
-      setTransactions(syncTaxTransactions(withOverrides));
-      isRestoringFromCloud.current = false;
+        isRestoringFromCloud.current = true;
+        replaceClients(snapshot.clients ?? []);
+        replaceCustomCategories(snapshot.customCategories ?? []);
+        replaceLoanOverrides(snapshot.loanOverrides ?? {});
+        setInitialBalance(
+          typeof snapshot.initialBalance === 'number'
+            ? snapshot.initialBalance
+            : getInitialBalance()
+        );
+        const sanitizedSnapshot = sanitizeTransactions(snapshot.transactions ?? []);
+        const withOverrides = applyLoanOverrides(sanitizedSnapshot);
+        setTransactions(syncTaxTransactions(withOverrides));
+      } catch (error) {
+        console.error('Cloud sync fetch failed', error);
+      } finally {
+        isRestoringFromCloud.current = false;
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [currentUser]);
+  }, [currentUser, authToken]);
 
   useEffect(() => {
-    if (!currentUser || isRestoringFromCloud.current) return;
+    if (!currentUser || !authToken || isRestoringFromCloud.current) return;
 
-    persistCloudSnapshot(currentUser, {
+    const snapshotPayload = {
       transactions,
       initialBalance,
-      updatedAt: new Date().toISOString()
+      clients: getClients(),
+      customCategories: getCustomCategories(),
+      loanOverrides: getLoanOverrides(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    persistCloudSnapshot(authToken, snapshotPayload).catch(error => {
+      console.error('Cloud sync persist failed', error);
     });
-  }, [transactions, initialBalance, currentUser]);
+  }, [transactions, initialBalance, currentUser, authToken, storageSyncVersion]);
 
   useEffect(() => {
     setBalanceDraft(initialBalance.toString());
@@ -342,6 +400,7 @@ const App: React.FC = () => {
         initialBalance?: unknown;
         clients?: unknown;
         customCategories?: unknown;
+        loanOverrides?: unknown;
       };
 
       if (!Array.isArray(backup.transactions)) {
@@ -361,6 +420,10 @@ const App: React.FC = () => {
 
       if (Array.isArray(backup.customCategories)) {
         replaceCustomCategories(backup.customCategories);
+      }
+
+      if (backup.loanOverrides && typeof backup.loanOverrides === 'object') {
+        replaceLoanOverrides(backup.loanOverrides);
       }
 
       return;
@@ -408,7 +471,7 @@ const App: React.FC = () => {
     setIsMobileActionsOpen(false);
   };
 
-  if (!currentUser) {
+  if (!currentUser || !authToken) {
     return <Login onLogin={handleLogin} />;
   }
 

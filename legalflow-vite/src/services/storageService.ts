@@ -6,6 +6,19 @@ const STORAGE_KEY_INITIAL_BALANCE = 'legalflow_initial_balance_v2';
 const STORAGE_KEY_CUSTOM_CATEGORIES = 'legalflow_custom_categories_v2';
 const STORAGE_KEY_CLIENTS = 'legalflow_clients_v1';
 const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
+export const STORAGE_EVENT = 'legalflow:storage-changed';
+
+const emitStorageChange = (key: string) => {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(STORAGE_EVENT, {
+      detail: { key },
+    })
+  );
+};
 const LEGACY_LOAN_CATEGORY_NAMES = new Set(['מימון ישיר', 'פועלים', 'משכנתא']);
 const LEGACY_CLIENT_NAME = 'טרם';
 const REQUIRED_TEREM_CLIENTS = ['טרם ריטיינר', 'טרם שעתי'];
@@ -75,6 +88,7 @@ export const getCustomCategories = () => {
 export const replaceCustomCategories = (categories: unknown) => {
   const safeList = Array.isArray(categories) ? categories : [];
   localStorage.setItem(STORAGE_KEY_CUSTOM_CATEGORIES, JSON.stringify(safeList));
+  emitStorageChange('customCategories');
 };
 
 export const saveCustomCategory = (newCategoryName: string, type: 'income' | 'expense', specificGroup?: string) => {
@@ -92,6 +106,7 @@ export const saveCustomCategory = (newCategoryName: string, type: 'income' | 'ex
     };
     const updated = [...current, newCat];
     localStorage.setItem(STORAGE_KEY_CUSTOM_CATEGORIES, JSON.stringify(updated));
+  emitStorageChange('customCategories');
     return updated;
 };
 
@@ -114,6 +129,7 @@ const getLoanOverridesMap = (): Record<string, number> => {
 
 const persistLoanOverridesMap = (map: Record<string, number>) => {
   localStorage.setItem(STORAGE_KEY_LOAN_OVERRIDES, JSON.stringify(map));
+  emitStorageChange('loanOverrides');
 };
 
 export const rememberLoanOverride = (transactionId: string, amount: number) => {
@@ -174,6 +190,30 @@ export const applyLoanOverrides = (transactions: Transaction[]): Transaction[] =
   });
 
   return didMutate ? enriched : transactions;
+};
+
+export const getLoanOverrides = (): Record<string, number> => ({
+  ...getLoanOverridesMap(),
+});
+
+export const replaceLoanOverrides = (nextOverrides: unknown) => {
+  if (!nextOverrides || typeof nextOverrides !== 'object') {
+    persistLoanOverridesMap({});
+    return;
+  }
+
+  const sanitized: Record<string, number> = {};
+  for (const [key, value] of Object.entries(nextOverrides as Record<string, unknown>)) {
+    if (typeof key !== 'string' || !key.trim()) {
+      continue;
+    }
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) {
+      continue;
+    }
+    sanitized[key] = Math.abs(amount);
+  }
+  persistLoanOverridesMap(sanitized);
 };
 
 // --- Clients Logic ---
@@ -248,6 +288,7 @@ export const saveClient = (newClientName: string) => {
     if (!current.includes(newClientName)) {
         const updated = [...current, newClientName];
         localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(updated));
+        emitStorageChange('clients');
         return updated;
     }
     return current;
@@ -256,6 +297,7 @@ export const saveClient = (newClientName: string) => {
 export const replaceClients = (nextClients: unknown) => {
   const sanitized = sanitizeClientList(nextClients);
   localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(sanitized));
+  emitStorageChange('clients');
 };
 
 // --- Backup Logic ---
@@ -266,7 +308,8 @@ export const exportBackupJSON = (transactions: Transaction[]) => {
         transactions,
         clients: getClients(),
         customCategories: getCustomCategories(),
-        initialBalance: getInitialBalance()
+        initialBalance: getInitialBalance(),
+        loanOverrides: getLoanOverrides()
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

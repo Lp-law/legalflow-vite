@@ -1,24 +1,30 @@
 import React, { useState } from 'react';
 import Logo from './Logo';
+import { login } from '../services/cloudService';
 
 interface LoginProps {
-  onLogin: (user: string) => void;
+  onLogin: (payload: { username: string; token: string }) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Hardcoded credentials as requested
-    if ((username.toLowerCase() === 'lior' && password === 'lior123') ||
-        (username.toLowerCase() === 'lidor' && password === 'lidor123')) {
-      onLogin(username);
-    } else {
-      setError('שם משתמש או סיסמה שגויים');
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const auth = await login(username.trim(), password);
+      onLogin({ username: auth.user.username, token: auth.token });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'שגיאה בהתחברות';
+      setError(message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -63,9 +69,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           
           <button
             type="submit"
-            className="w-full py-3 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            disabled={isLoading}
+            className={`w-full py-3 bg-slate-900 text-white font-bold rounded-lg transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${
+              isLoading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-800'
+            }`}
           >
-            התחבר
+            {isLoading ? 'מתחבר...' : 'התחבר'}
           </button>
         </form>
         
