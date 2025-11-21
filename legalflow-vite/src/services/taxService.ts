@@ -1,5 +1,5 @@
 import type { Transaction } from '../types';
-import { formatDateKey } from '../utils/date';
+import { formatDateKey, parseDateKey } from '../utils/date';
 
 /**
  * This function takes the current list of transactions,
@@ -12,7 +12,7 @@ export const syncTaxTransactions = (transactions: Transaction[]): Transaction[] 
 
     transactions.forEach(t => {
         if (t.type === 'income' && t.group === 'fee' && t.status === 'completed') {
-            const date = new Date(t.date);
+            const date = parseDateKey(t.date);
             const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
             monthlyFees[key] = (monthlyFees[key] || 0) + t.amount;
         }

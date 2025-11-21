@@ -1,33 +1,50 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight } from 'lucide-react';
 import type { Transaction, TransactionGroup } from './types';
-import { getTransactions, saveTransactions, getInitialBalance, saveInitialBalance, exportBackupJSON } from './services/storageService';
+import { getTransactions, saveTransactions, getInitialBalance, saveInitialBalance, exportBackupJSON, applyLoanOverrides, rememberLoanOverride, removeLoanOverride } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
 import { syncTaxTransactions } from './services/taxService';
 import TransactionForm from './components/TransactionForm';
 import Logo from './components/Logo';
 import Login from './components/Login';
 import { fetchCloudSnapshot, persistCloudSnapshot } from './services/cloudService';
-import { formatDateKey } from './utils/date';
+import { formatDateKey, parseDateKey } from './utils/date';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const CollectionTracker = lazy(() => import('./components/CollectionTracker'));
 const ExecutiveSummary = lazy(() => import('./components/ExecutiveSummary'));
 
-const CASHFLOW_CUTOFF = new Date('2025-11-01T00:00:00');
-const LOAN_FREEZE_CUTOFF = new Date('2025-12-01T00:00:00');
+const CASHFLOW_CUTOFF = parseDateKey('2025-11-01');
+const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
+
+const normalizeTransactionDates = (list: Transaction[]) => {
+  let didNormalize = false;
+  const normalized = list.map(transaction => {
+    const normalizedDate = formatDateKey(parseDateKey(transaction.date));
+    if (normalizedDate !== transaction.date) {
+      didNormalize = true;
+      return { ...transaction, date: normalizedDate };
+    }
+    return transaction;
+  });
+  return { normalized, didNormalize };
+};
 
 const sanitizeTransactions = (list: Transaction[]) => {
-  const cutoffTransactions = list
-    .filter(t => new Date(t.date) >= CASHFLOW_CUTOFF)
-    .filter(t => !(t.group === 'loan' && new Date(t.date) >= LOAN_FREEZE_CUTOFF));
-  if (cutoffTransactions.length === list.length) {
-    return cutoffTransactions;
+  const { normalized, didNormalize } = normalizeTransactionDates(list);
+  const cutoffTransactions = normalized
+    .filter(t => parseDateKey(t.date) >= CASHFLOW_CUTOFF)
+    .filter(t => !(t.group === 'loan' && parseDateKey(t.date) >= LOAN_FREEZE_CUTOFF));
+
+  if (cutoffTransactions.length !== list.length || didNormalize) {
+    saveTransactions(cutoffTransactions);
   }
-  saveTransactions(cutoffTransactions);
+
   return cutoffTransactions;
 };
+
+const DECIMAL_INPUT_PATTERN = /^-?\d*(?:[.,]\d*)?$/;
 
 const App: React.FC = () => {
   // Auth State
@@ -36,7 +53,9 @@ const App: React.FC = () => {
   // App State - Lazy initialization ensures we read from storage on first render before any overwrites
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
       const stored = getTransactions();
-      return syncTaxTransactions(sanitizeTransactions(stored));
+      const sanitized = sanitizeTransactions(stored);
+      const withOverrides = applyLoanOverrides(sanitized);
+      return syncTaxTransactions(withOverrides);
   });
   
   const [initialBalance, setInitialBalance] = useState(() => getInitialBalance());
@@ -113,15 +132,25 @@ const App: React.FC = () => {
   // Helper to update transactions and sync taxes
   const updateTransactionsWithSync = (newTransactionsList: Transaction[]) => {
       const filtered = sanitizeTransactions(newTransactionsList);
-      const synced = syncTaxTransactions(filtered);
+      const withOverrides = applyLoanOverrides(filtered);
+      const synced = syncTaxTransactions(withOverrides);
       setTransactions(synced);
   };
 
   const handleAddTransactionBatch = (newTransactions: Omit<Transaction, 'id'>[]) => {
-      const processedTransactions = newTransactions.map(t => ({
-          ...t,
-          id: crypto.randomUUID()
-      }));
+      const processedTransactions = newTransactions.map(t => {
+          const id = crypto.randomUUID();
+          let amount = t.amount;
+          if (t.group === 'loan') {
+            amount = Math.abs(t.amount);
+            rememberLoanOverride(id, amount);
+          }
+          return {
+            ...t,
+            amount,
+            id,
+          };
+      });
       
       const updatedList = [...transactions, ...processedTransactions];
       updateTransactionsWithSync(updatedList);
@@ -129,8 +158,12 @@ const App: React.FC = () => {
 
   const handleDeleteTransaction = (id: string) => {
     if(window.confirm('האם אתה בטוח שברצונך למחוק תנועה זו?')) {
+        const target = transactions.find(t => t.id === id);
         const updatedList = transactions.filter(t => t.id !== id);
         updateTransactionsWithSync(updatedList);
+        if (target?.group === 'loan') {
+          removeLoanOverride(id);
+        }
     }
   };
 
@@ -169,6 +202,28 @@ const App: React.FC = () => {
 
     if (didUpdate) {
       updateTransactionsWithSync(updatedList);
+    }
+  };
+
+  const handleUpdateLoanAmount = (transactionId: string, nextAmount: number) => {
+    if (!Number.isFinite(nextAmount)) return;
+    const normalizedAmount = Math.abs(nextAmount);
+    let didUpdate = false;
+
+    const updatedList = transactions.map(t => {
+      if (t.id !== transactionId || t.group !== 'loan') {
+        return t;
+      }
+      didUpdate = true;
+      return {
+        ...t,
+        amount: normalizedAmount
+      };
+    });
+
+    if (didUpdate) {
+      updateTransactionsWithSync(updatedList);
+      rememberLoanOverride(transactionId, normalizedAmount);
     }
   };
 
@@ -218,7 +273,9 @@ const App: React.FC = () => {
 
       isRestoringFromCloud.current = true;
       setInitialBalance(snapshot.initialBalance ?? getInitialBalance());
-      setTransactions(syncTaxTransactions(sanitizeTransactions(snapshot.transactions ?? [])));
+      const sanitizedSnapshot = sanitizeTransactions(snapshot.transactions ?? []);
+      const withOverrides = applyLoanOverrides(sanitizedSnapshot);
+      setTransactions(syncTaxTransactions(withOverrides));
       isRestoringFromCloud.current = false;
     })();
 
@@ -241,8 +298,16 @@ const App: React.FC = () => {
     setBalanceDraft(initialBalance.toString());
   }, [initialBalance]);
 
+  const handleBalanceDraftChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { value } = event.target;
+    if (DECIMAL_INPUT_PATTERN.test(value)) {
+      setBalanceDraft(value);
+    }
+  };
+
   const handleSaveInitialBalance = () => {
-    const parsed = Number(balanceDraft);
+    const sanitizedDraft = balanceDraft.replace(',', '.');
+    const parsed = Number(sanitizedDraft);
     const normalized = Number.isFinite(parsed) ? parsed : 0;
     setInitialBalance(normalized);
     saveInitialBalance(normalized);
@@ -402,6 +467,7 @@ const App: React.FC = () => {
               openTransactionForm={openTransactionForm}
               onToggleStatus={handleToggleTransactionStatus}
               onUpdateTaxAmount={handleUpdateTaxAmount}
+              onUpdateLoanAmount={handleUpdateLoanAmount}
             />
           )}
 
@@ -457,7 +523,7 @@ const App: React.FC = () => {
       />
 
       {isBalanceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/70 backdrop-blur-sm p-4 pt-20 md:pt-24 overflow-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200">
             <div className="p-6 border-b border-slate-100">
               <h3 className="text-xl font-bold text-slate-800">עדכון יתרת פתיחה</h3>
@@ -469,9 +535,11 @@ const App: React.FC = () => {
               <label className="text-sm font-medium text-slate-700">
                 סכום פתיחה (₪)
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
+                  pattern="-?[0-9]*([.,][0-9]*)?"
                   value={balanceDraft}
-                  onChange={(e) => setBalanceDraft(e.target.value)}
+                  onChange={handleBalanceDraftChange}
                   className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </label>

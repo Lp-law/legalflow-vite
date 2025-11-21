@@ -14,6 +14,16 @@ interface TransactionFormProps {
   initialGroup?: TransactionGroup;
 }
 
+const sanitizeNumericInput = (value: string) => {
+  if (!value) return NaN;
+  const trimmed = value
+    .replace(/₪/g, '')
+    .replace(/\s+/g, '')
+    .replace(/,/g, '');
+  if (!trimmed) return NaN;
+  return Number(trimmed);
+};
+
 const TransactionForm: React.FC<TransactionFormProps> = ({ 
   isOpen, 
   onClose, 
@@ -26,6 +36,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [group, setGroup] = useState<TransactionGroup>('fee');
   
   const [amount, setAmount] = useState('');
+  const [isAmountManual, setIsAmountManual] = useState(false);
   const [date, setDate] = useState(formatDateKey(new Date()));
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -70,6 +81,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
       
       setAmount('');
+      setIsAmountManual(false);
       setDescription('');
       setCategory('');
       setClientReference('');
@@ -112,23 +124,23 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
   }, [group]);
 
-  useEffect(() => {
-    if (!category || category === 'ADD_NEW') return;
+  const applyCategoryDefaults = (categoryName: string, force = false) => {
+    const selectedCat = availableCategories.find(c => c.name === categoryName);
+    if (!selectedCat) return;
+    const isLoanCategory = selectedCat.group === 'loan';
 
-    const selectedCat = availableCategories.find(c => c.name === category);
-    if (selectedCat) {
-      if (selectedCat.defaultAmount !== undefined) {
-        setAmount(selectedCat.defaultAmount.toString());
-      }
-      if (selectedCat.defaultDay !== undefined) {
-        const currentDateObj = new Date(date);
-        const year = currentDateObj.getFullYear();
-        const month = currentDateObj.getMonth();
-        const newDateObj = new Date(year, month, selectedCat.defaultDay, 12);
-        setDate(formatDateKey(newDateObj));
-      }
+    if (!isLoanCategory && selectedCat.defaultAmount !== undefined && (force || !isAmountManual || amount === '')) {
+      setAmount(selectedCat.defaultAmount.toString());
+      setIsAmountManual(false);
     }
-  }, [category, availableCategories]);
+    if (selectedCat.defaultDay !== undefined) {
+      const currentDateObj = new Date(date);
+      const year = currentDateObj.getFullYear();
+      const month = currentDateObj.getMonth();
+      const newDateObj = new Date(year, month, selectedCat.defaultDay, 12);
+      setDate(formatDateKey(newDateObj));
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -167,8 +179,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     // If user manually adds an expense in 'tax' group, we flag it.
     const isManualOverride = group === 'tax';
 
-    const absoluteAmount = Math.abs(parseFloat(amount));
-    const effectiveAmount = group === 'bank_adjustment' ? parseFloat(amount) : absoluteAmount;
+    const parsedAmount = sanitizeNumericInput(amount);
+    if (!Number.isFinite(parsedAmount)) {
+      alert('נא להזין סכום חוקי (מספרים, נקודה או פסיק).');
+      return;
+    }
+
+    const absoluteAmount = Math.abs(parsedAmount);
+    const effectiveAmount = group === 'bank_adjustment' ? parsedAmount : absoluteAmount;
 
     const transactionsToCreate: Omit<Transaction, 'id'>[] = [];
 
@@ -321,16 +339,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 )}
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
+                pattern="^-?[0-9₪.,\\s-]*$"
                 required
-                min={
-                  group === 'fee' || group === 'other_income'
-                    ? '0'
-                    : undefined
-                }
-                step="0.01"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setIsAmountManual(true);
+                  setAmount(e.target.value);
+                }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg font-semibold"
                 autoFocus
               />
@@ -371,11 +388,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             required
                             value={category}
                             onChange={(e) => {
-                                if (e.target.value === 'ADD_NEW') {
+                                const nextValue = e.target.value;
+                                if (nextValue === 'ADD_NEW') {
                                     setIsAddingCategory(true);
                                     setCategory('ADD_NEW');
                                 } else {
-                                    setCategory(e.target.value);
+                                    setCategory(nextValue);
+                                    applyCategoryDefaults(nextValue);
                                 }
                             }}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"

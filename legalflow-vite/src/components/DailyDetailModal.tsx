@@ -12,6 +12,7 @@ interface DailyDetailModalProps {
   onAdd: () => void;
   onToggleStatus?: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount?: (id: string, amount: number) => void;
+  onUpdateLoanAmount?: (id: string, amount: number) => void;
 }
 
 const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
@@ -23,12 +24,15 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
   onDelete,
   onAdd,
   onToggleStatus,
-  onUpdateTaxAmount
+  onUpdateTaxAmount,
+  onUpdateLoanAmount
 }) => {
   if (!isOpen) return null;
 
-  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [editingTaxTransactionId, setEditingTaxTransactionId] = useState<string | null>(null);
   const [taxDraft, setTaxDraft] = useState('');
+  const [editingLoanTransactionId, setEditingLoanTransactionId] = useState<string | null>(null);
+  const [loanDraft, setLoanDraft] = useState('');
 
   const formattedDate = new Date(date).toLocaleDateString('he-IL', {
     weekday: 'long',
@@ -77,12 +81,12 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
   };
 
   const startTaxEdit = (transaction: Transaction) => {
-    setEditingTransactionId(transaction.id);
+    setEditingTaxTransactionId(transaction.id);
     setTaxDraft(transaction.amount.toString());
   };
 
   const cancelTaxEdit = () => {
-    setEditingTransactionId(null);
+    setEditingTaxTransactionId(null);
     setTaxDraft('');
   };
 
@@ -95,6 +99,27 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
     }
     onUpdateTaxAmount(transactionId, Math.abs(parsed));
     cancelTaxEdit();
+  };
+
+  const startLoanEdit = (transaction: Transaction) => {
+    setEditingLoanTransactionId(transaction.id);
+    setLoanDraft(transaction.amount.toString());
+  };
+
+  const cancelLoanEdit = () => {
+    setEditingLoanTransactionId(null);
+    setLoanDraft('');
+  };
+
+  const handleSaveLoanAmount = (transactionId: string) => {
+    if (!onUpdateLoanAmount) return;
+    const parsed = Number(loanDraft);
+    if (!Number.isFinite(parsed)) {
+      alert('נא להזין סכום תקין');
+      return;
+    }
+    onUpdateLoanAmount(transactionId, Math.abs(parsed));
+    cancelLoanEdit();
   };
 
   return (
@@ -143,7 +168,7 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
                   <p className="text-sm text-slate-600 font-medium">{t.description}</p>
                   <p className="text-xs text-slate-400">{t.category}</p>
                   {group === 'tax' && (t.category === 'מע"מ' || t.category === 'מס הכנסה אישי') && onUpdateTaxAmount && (
-                    editingTransactionId === t.id ? (
+                    editingTaxTransactionId === t.id ? (
                       <div className="mt-3 space-y-2">
                         <div className="flex items-center gap-2">
                           <input
@@ -198,6 +223,44 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
                             );
                           })()}
                         </>
+                      )}
+                      {onUpdateLoanAmount && (
+                        editingLoanTransactionId === t.id ? (
+                          <div className="space-y-2 mt-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="w-28 px-2 py-1 border border-slate-200 rounded text-sm"
+                                value={loanDraft}
+                                onChange={(e) => setLoanDraft(e.target.value)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveLoanAmount(t.id)}
+                                className="px-3 py-1 text-xs font-semibold rounded bg-emerald-600 text-white hover:bg-emerald-500"
+                              >
+                                שמור
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelLoanEdit}
+                                className="px-3 py-1 text-xs font-semibold rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+                              >
+                                בטל
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startLoanEdit(t)}
+                            className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-500 underline-offset-2"
+                          >
+                            עדכן סכום הלוואה
+                          </button>
+                        )
                       )}
                     </div>
                   )}

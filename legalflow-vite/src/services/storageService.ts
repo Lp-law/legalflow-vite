@@ -5,6 +5,7 @@ const STORAGE_KEY_TRANSACTIONS = 'legalflow_transactions_v2';
 const STORAGE_KEY_INITIAL_BALANCE = 'legalflow_initial_balance_v2';
 const STORAGE_KEY_CUSTOM_CATEGORIES = 'legalflow_custom_categories_v2';
 const STORAGE_KEY_CLIENTS = 'legalflow_clients_v1';
+const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
 
 export const getTransactions = (): Transaction[] => {
   const stored = localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
@@ -61,6 +62,82 @@ export const saveCustomCategory = (newCategoryName: string, type: 'income' | 'ex
 export const getAllCategories = () => {
     const custom = getCustomCategories();
     return [...CATEGORIES, ...custom];
+};
+
+const getLoanOverridesMap = (): Record<string, number> => {
+  const stored = localStorage.getItem(STORAGE_KEY_LOAN_OVERRIDES);
+  if (!stored) {
+    return {};
+  }
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return {};
+  }
+};
+
+const persistLoanOverridesMap = (map: Record<string, number>) => {
+  localStorage.setItem(STORAGE_KEY_LOAN_OVERRIDES, JSON.stringify(map));
+};
+
+export const rememberLoanOverride = (transactionId: string, amount: number) => {
+  const overrides = getLoanOverridesMap();
+  overrides[transactionId] = amount;
+  persistLoanOverridesMap(overrides);
+};
+
+export const removeLoanOverride = (transactionId: string) => {
+  const overrides = getLoanOverridesMap();
+  if (transactionId in overrides) {
+    delete overrides[transactionId];
+    persistLoanOverridesMap(overrides);
+  }
+};
+
+export const applyLoanOverrides = (transactions: Transaction[]): Transaction[] => {
+  const overrides = getLoanOverridesMap();
+  const entries = Object.entries(overrides);
+  if (!entries.length) {
+    return transactions;
+  }
+
+  const transactionIds = new Set(transactions.map(t => t.id));
+  let didPrune = false;
+  const filteredOverrides: Record<string, number> = {};
+
+  entries.forEach(([id, amount]) => {
+    if (transactionIds.has(id)) {
+      filteredOverrides[id] = amount;
+    } else {
+      didPrune = true;
+    }
+  });
+
+  if (didPrune) {
+    persistLoanOverridesMap(filteredOverrides);
+  }
+
+  if (!Object.keys(filteredOverrides).length) {
+    return transactions;
+  }
+
+  let didMutate = false;
+  const enriched = transactions.map(transaction => {
+    if (transaction.group !== 'loan') {
+      return transaction;
+    }
+    const overrideAmount = filteredOverrides[transaction.id];
+    if (overrideAmount === undefined || transaction.amount === overrideAmount) {
+      return transaction;
+    }
+    didMutate = true;
+    return {
+      ...transaction,
+      amount: overrideAmount,
+    };
+  });
+
+  return didMutate ? enriched : transactions;
 };
 
 // --- Clients Logic ---

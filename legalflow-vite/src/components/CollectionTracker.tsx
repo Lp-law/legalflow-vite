@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import type { Transaction } from '../types';
 import { AlertCircle, CheckCircle, DollarSign, Calendar, Download } from 'lucide-react';
 import { exportToCSV } from '../services/exportService';
+import { parseDateKey } from '../utils/date';
 
 interface CollectionTrackerProps {
   transactions: Transaction[];
@@ -10,34 +11,52 @@ interface CollectionTrackerProps {
 
 const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onMarkAsPaid }) => {
   
-  // Filter: Income -> Pending -> Only "Sh'char Tircha" (Fee)
-  const pendingFees = useMemo(() => {
+  const isExpenseReimbursement = (transaction: Transaction) => {
+    if (transaction.group === 'other_income') return true;
+    return (transaction.category || '').includes('החזר');
+  };
+
+  const pendingItems = useMemo(() => {
     return transactions
-      .filter(t => 
-          t.type === 'income' && 
-          t.status === 'pending' && 
-          t.category === 'שכר טרחה' // Strict filter as requested
+      .filter(
+        t =>
+          t.type === 'income' &&
+          t.status === 'pending' &&
+          (t.group === 'fee' || isExpenseReimbursement(t))
       )
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .sort(
+        (a, b) =>
+          parseDateKey(a.date).getTime() - parseDateKey(b.date).getTime()
+      );
   }, [transactions]);
 
   const calculateDaysOpen = (dateStr: string) => {
-    const start = new Date(dateStr);
+    const start = parseDateKey(dateStr);
     const now = new Date();
     const diff = now.getTime() - start.getTime();
     return Math.floor(diff / (1000 * 60 * 60 * 24));
   };
 
-  const totalPending = pendingFees.reduce((sum, t) => sum + t.amount, 0);
-  const overdueCount = pendingFees.filter(t => calculateDaysOpen(t.date) > 30).length;
+  const totalFeeDue = pendingItems.reduce(
+    (sum, t) => (t.group === 'fee' ? sum + t.amount : sum),
+    0
+  );
+  const totalReimbursementDue = pendingItems.reduce(
+    (sum, t) => (isExpenseReimbursement(t) ? sum + t.amount : sum),
+    0
+  );
+  const overdueCount = pendingItems.filter(
+    t => calculateDaysOpen(t.date) > 30
+  ).length;
 
   const handleExportCollection = () => {
-    const headers = ['תאריך דרישה', 'לקוח', 'אסמכתא', 'סכום לתשלום', 'ימים פתוח', 'סטטוס'];
-    const rows = pendingFees.map(t => [
-      new Date(t.date).toLocaleDateString('he-IL'),
+    const headers = ['תאריך דרישה', 'לקוח', 'אסמכתא', 'שכר טרחה לתשלום', 'החזר הוצאות לתשלום', 'ימים פתוח', 'סטטוס'];
+    const rows = pendingItems.map(t => [
+      parseDateKey(t.date).toLocaleDateString('he-IL'),
       t.description,
       t.clientReference || '',
-      t.amount,
+      t.group === 'fee' ? t.amount : 0,
+      isExpenseReimbursement(t) ? t.amount : 0,
       calculateDaysOpen(t.date),
       t.status === 'completed' ? 'שולם' : 'ממתין'
     ]);
@@ -51,11 +70,20 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
            <div>
-             <p className="text-sm text-slate-500 font-medium">צפי גבייה (שכ"ט בלבד)</p>
-             <p className="text-2xl font-bold text-slate-800">₪{totalPending.toLocaleString()}</p>
+             <p className="text-sm text-slate-500 font-medium">סה"כ שכר טרחה ממתין</p>
+             <p className="text-2xl font-bold text-slate-800">₪{totalFeeDue.toLocaleString()}</p>
            </div>
            <div className="p-3 bg-blue-50 rounded-full">
              <DollarSign className="w-6 h-6 text-blue-600" />
+           </div>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+           <div>
+             <p className="text-sm text-slate-500 font-medium">סה"כ החזרי הוצאות ממתינים</p>
+             <p className="text-2xl font-bold text-slate-800">₪{totalReimbursementDue.toLocaleString()}</p>
+           </div>
+           <div className="p-3 bg-teal-50 rounded-full">
+             <DollarSign className="w-6 h-6 text-teal-600" />
            </div>
         </div>
 
@@ -102,15 +130,16 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
                 <th className="px-6 py-4">תאריך דרישה</th>
                 <th className="px-6 py-4">לקוח</th>
                 <th className="px-6 py-4">אסמכתא/תיק</th>
-                <th className="px-6 py-4">סכום לתשלום</th>
+                <th className="px-6 py-4">שכר טרחה לתשלום</th>
+                <th className="px-6 py-4">החזר הוצאות לתשלום</th>
                 <th className="px-6 py-4">ימים פתוח</th>
                 <th className="px-6 py-4">פעולות</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {pendingFees.length === 0 ? (
+              {pendingItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center gap-2">
                         <CheckCircle className="w-10 h-10 text-emerald-400" />
                         <span className="text-lg font-medium text-slate-600">אין חובות פתוחים</span>
@@ -119,14 +148,14 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
                   </td>
                 </tr>
               ) : (
-                pendingFees.map((t) => {
+                pendingItems.map((t) => {
                   const daysOpen = calculateDaysOpen(t.date);
                   const isOverdue = daysOpen > 30;
                   
                   return (
                     <tr key={t.id} className={`transition-all ${isOverdue ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}>
                       <td className="px-6 py-4 font-medium text-slate-700">
-                        {new Date(t.date).toLocaleDateString('he-IL')}
+                        {parseDateKey(t.date).toLocaleDateString('he-IL')}
                       </td>
                       <td className="px-6 py-4 text-slate-900 font-bold text-base">{t.description}</td>
                       <td className="px-6 py-4 text-slate-500">
@@ -134,7 +163,12 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
                              <span className="bg-white border border-slate-200 px-2 py-1 rounded text-xs">#{t.clientReference}</span>
                           ) : '-'}
                       </td>
-                      <td className="px-6 py-4 font-bold text-slate-800">₪{t.amount.toLocaleString()}</td>
+                      <td className="px-6 py-4 font-semibold text-slate-800">
+                        {t.group === 'fee' ? `₪${t.amount.toLocaleString()}` : '-'}
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-slate-800">
+                        {isExpenseReimbursement(t) ? `₪${t.amount.toLocaleString()}` : '-'}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                             <span className={`px-2 py-1 rounded text-xs font-bold ${isOverdue ? 'bg-red-200 text-red-800' : 'bg-slate-200 text-slate-700'}`}>

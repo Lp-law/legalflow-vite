@@ -1,7 +1,7 @@
 import type { Transaction } from '../types';
 import type { CashflowRow } from '../utils/cashflow';
 import { addTotals, normalize } from '../utils/cashflow';
-import { formatDateKey } from '../utils/date';
+import { formatDateKey, parseDateKey } from '../utils/date';
 
 type Period = 'month' | 'quarter' | 'year';
 
@@ -59,7 +59,7 @@ const computeOpeningBalance = (
   const historicDelta = transactions
     .filter(
       (t) =>
-        t.status === 'completed' && new Date(t.date).getTime() < cutoff
+        t.status === 'completed' && parseDateKey(t.date).getTime() < cutoff
     )
     .reduce((sum, t) => {
       if (t.type === 'income') return sum + t.amount;
@@ -144,7 +144,7 @@ const describeDay = (
   const amount = row.dailyTotal;
   const descriptor =
     amount >= 0 ? 'תזרים חיובי' : 'תזרים שלילי';
-  const date = new Date(row.date).toLocaleDateString('he-IL');
+  const date = parseDateKey(row.date).toLocaleDateString('he-IL');
   return `   ${label}: ${descriptor} של ${formatCurrency(
     Math.abs(amount)
   )} בתאריך ${date}`;
@@ -159,10 +159,8 @@ export const generateExecutiveSummary = (
   const range = getPeriodRange(period);
 
   const relevantTransactions = transactions.filter((t) => {
-    const tTime = new Date(t.date).getTime();
-    return (
-      tTime >= range.start.getTime() && tTime <= range.end.getTime()
-    );
+    const tTime = parseDateKey(t.date).getTime();
+    return tTime >= range.start.getTime() && tTime <= range.end.getTime();
   });
 
   const openingBalance = computeOpeningBalance(
@@ -245,7 +243,7 @@ export const generateExecutiveSummary = (
   );
   const overdueCount = pendingTransactions.filter((t) => {
     const days =
-      (now.getTime() - new Date(t.date).getTime()) /
+      (now.getTime() - parseDateKey(t.date).getTime()) /
       (1000 * 60 * 60 * 24);
     return days > 30;
   }).length;

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, 
   Cell, PieChart, Pie, Legend
@@ -9,7 +9,8 @@ import { TrendingUp, TrendingDown, Wallet, Scale, Activity, Info, Download } fro
 import { exportToCSV } from '../services/exportService';
 import { addTotals, normalize } from '../utils/cashflow';
 import type { CashflowRow } from '../utils/cashflow';
-import { formatDateKey } from '../utils/date';
+import { formatDateKey, parseDateKey } from '../utils/date';
+import FeeSummaryModal from './FeeSummaryModal';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -17,9 +18,10 @@ interface DashboardProps {
   currentBalance: number;
 }
 
-const LOAN_FREEZE_CUTOFF = new Date('2025-12-01T00:00:00');
+const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
 
 const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, currentBalance }) => {
+  const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const today = useMemo(() => new Date(), []);
   const startOfMonth = useMemo(
     () => new Date(today.getFullYear(), today.getMonth(), 1),
@@ -48,7 +50,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
   const monthTransactions = useMemo(
     () =>
       completedTransactions.filter(t => {
-        const tDate = new Date(t.date);
+        const tDate = parseDateKey(t.date);
         return tDate >= startOfMonth && tDate <= endOfMonth;
       }),
     [completedTransactions, startOfMonth, endOfMonth]
@@ -56,7 +58,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
 
   const monthStartBalance = useMemo(() => {
     const previousTransactions = completedTransactions.filter(t => {
-      const tDate = new Date(t.date);
+      const tDate = parseDateKey(t.date);
       return tDate < startOfMonth;
     });
 
@@ -161,6 +163,41 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
     );
   }, [cashflowRows]);
 
+  const totalsByGroup = useMemo(() => {
+    return cashflowRows.reduce(
+      (acc, row) => {
+        acc.fee += Math.max(0, normalize(row.salary));
+        acc.otherIncome += Math.max(0, normalize(row.otherIncome));
+        acc.operational += Math.abs(normalize(row.expenses));
+        acc.taxes += Math.abs(normalize(row.taxes));
+        acc.loans += Math.abs(normalize(row.loans));
+        acc.withdrawals += Math.abs(normalize(row.withdrawals));
+        return acc;
+      },
+      {
+        fee: 0,
+        otherIncome: 0,
+        operational: 0,
+        taxes: 0,
+        loans: 0,
+        withdrawals: 0,
+      }
+    );
+  }, [cashflowRows]);
+
+  const operationalProfit = useMemo(
+    () => totalsByGroup.fee - totalsByGroup.operational,
+    [totalsByGroup]
+  );
+
+  const netProfit = useMemo(
+    () =>
+      totalsByGroup.fee +
+      totalsByGroup.otherIncome -
+      (totalsByGroup.operational + totalsByGroup.taxes),
+    [totalsByGroup]
+  );
+
   // --- Calculations ---
   const summary = useMemo(() => {
     const net = flowCurrentBalance - monthStartBalance;
@@ -198,7 +235,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
   const expensesByCategory = useMemo(() => {
     const data: Record<string, number> = {};
     monthTransactions.forEach(t => {
-      if (t.group === 'loan' && new Date(t.date) >= LOAN_FREEZE_CUTOFF) {
+      if (t.group === 'loan' && parseDateKey(t.date) >= LOAN_FREEZE_CUTOFF) {
         return;
       }
       if (t.type === 'expense') {
@@ -248,7 +285,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
     chartData.forEach(point => {
       rows.push([
         'מגמת יתרה',
-        new Date(point.date).toLocaleDateString('he-IL'),
+        parseDateKey(point.date).toLocaleDateString('he-IL'),
         point.balance,
         `+₪${point.income.toLocaleString()} / -₪${point.expense.toLocaleString()}`
       ]);
@@ -297,8 +334,55 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
           colorClass="bg-purple-600"
         />
       </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        <KPICard 
+          title="רווח תפעולי"
+          value={operationalProfit}
+          icon={Activity}
+          colorClass="bg-indigo-600"
+        />
+        <KPICard 
+          title="רווח נטו"
+          value={netProfit}
+          icon={Scale}
+          colorClass="bg-slate-700"
+        />
+        <KPICard 
+          title={'סה"כ הוצאות'}
+          value={totalsByGroup.operational}
+          icon={TrendingDown}
+          colorClass="bg-amber-600"
+        />
+        <KPICard 
+          title={'סה"כ מיסים'}
+          value={totalsByGroup.taxes}
+          icon={Info}
+          colorClass="bg-yellow-600"
+        />
+        <KPICard 
+          title={'סה"כ הלוואות'}
+          value={totalsByGroup.loans}
+          icon={TrendingDown}
+          colorClass="bg-rose-600"
+        />
+        <KPICard 
+          title={'סה"כ משיכות'}
+          value={totalsByGroup.withdrawals}
+          icon={TrendingDown}
+          colorClass="bg-pink-600"
+        />
+      </div>
 
       {/* Charts Row */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => setIsFeeSummaryOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg shadow-sm hover:bg-slate-800 transition-colors"
+        >
+          סיכום שכר טרחה
+          <Download className="w-4 h-4" />
+        </button>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Trend Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
@@ -327,7 +411,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
                   dataKey="date" 
-                  tickFormatter={(val) => new Date(val).getDate().toString()}
+                  tickFormatter={(val) => parseDateKey(String(val)).getDate().toString()}
                   axisLine={false}
                   tickLine={false}
                   tick={{fill: '#94a3b8', fontSize: 12}}
@@ -340,7 +424,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
                 />
                 <RechartsTooltip 
                   formatter={(value: number) => `₪${value.toLocaleString()}`}
-                  labelFormatter={(label) => new Date(label).toLocaleDateString('he-IL')}
+                  labelFormatter={(label) => parseDateKey(String(label)).toLocaleDateString('he-IL')}
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
                 <Area 
@@ -389,6 +473,11 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, initialBalance, cur
           </div>
         </div>
       </div>
+      <FeeSummaryModal
+        isOpen={isFeeSummaryOpen}
+        onClose={() => setIsFeeSummaryOpen(false)}
+        transactions={transactions}
+      />
     </div>
   );
 };

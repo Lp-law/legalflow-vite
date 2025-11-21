@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { Transaction } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { PieChart, BarChart3 } from 'lucide-react';
+import { parseDateKey } from '../utils/date';
 
 interface FinancialAnalysisProps {
   transactions: Transaction[];
@@ -38,7 +39,7 @@ const FinancialAnalysis: React.FC<FinancialAnalysisProps> = ({ transactions, mod
       // 1. Filter by Type (Income vs Expense)
       if (t.type !== mode) return false;
 
-      const tDate = new Date(t.date);
+      const tDate = parseDateKey(t.date);
       const tYear = tDate.getFullYear();
       const tMonth = tDate.getMonth();
 

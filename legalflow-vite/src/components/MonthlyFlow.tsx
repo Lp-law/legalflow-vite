@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronRight, ChevronLeft, Plus, Download } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
 import DailyDetailModal from './DailyDetailModal';
 import { exportToCSV } from '../services/exportService';
 import { addTotals } from '../utils/cashflow';
 import type { CashflowRow } from '../utils/cashflow';
-import { formatDateKey } from '../utils/date';
+import { formatDateKey, parseDateKey } from '../utils/date';
 
 interface MonthlyFlowProps {
   transactions: Transaction[];
@@ -14,6 +15,7 @@ interface MonthlyFlowProps {
   openTransactionForm: (date?: string, type?: 'income' | 'expense', group?: TransactionGroup) => void;
   onToggleStatus: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount: (id: string, amount: number) => void;
+  onUpdateLoanAmount: (id: string, amount: number) => void;
 }
 
 type MonthSummary = {
@@ -39,7 +41,8 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   onDeleteTransaction,
   openTransactionForm,
   onToggleStatus,
-  onUpdateTaxAmount
+  onUpdateTaxAmount,
+  onUpdateLoanAmount
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   
@@ -49,107 +52,162 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     group: TransactionGroup;
     transactions: Transaction[];
   } | null>(null);
+  const [cellTooltip, setCellTooltip] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    title: string;
+    total: number;
+    transactions: Transaction[];
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    title: '',
+    total: 0,
+    transactions: [],
+  });
 
   // --- Date Logic ---
+  const monthStartDate = useMemo(
+    () => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
+    [currentDate]
+  );
+
+  const monthEndDate = useMemo(
+    () => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0),
+    [currentDate]
+  );
+
   const daysInMonth = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const date = new Date(year, month, 1);
-    const days = [];
-    while (date.getMonth() === month) {
-      days.push(new Date(date));
-      date.setDate(date.getDate() + 1);
+    const days: Date[] = [];
+    const cursor = new Date(monthStartDate);
+    while (cursor.getMonth() === monthStartDate.getMonth()) {
+      days.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
     }
     return days;
-  }, [currentDate]);
+  }, [monthStartDate]);
 
-  // --- Financial Logic ---
-  const monthStartBalance = useMemo(() => {
-    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const previousTransactions = transactions.filter(t => {
-        const tDate = new Date(t.date);
-        return t.status === 'completed' && tDate < startOfMonth; 
-    });
+  const globalCashflowMap = useMemo(() => {
+    const buildRows = (start: Date, end: Date) => {
+      const rows: CashflowRow[] = [];
+      const cursor = new Date(start);
+      while (cursor.getTime() <= end.getTime()) {
+        rows.push({
+          date: formatDateKey(cursor),
+          salary: 0,
+          otherIncome: 0,
+          loans: 0,
+          withdrawals: 0,
+          expenses: 0,
+          taxes: 0,
+          bankAdjustments: 0,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return rows;
+    };
 
-    const prevIncome = previousTransactions
-        .filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + t.amount, 0);
-        
-    const prevExpense = previousTransactions
-        .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
-        
-    return initialBalance + prevIncome - prevExpense;
-  }, [transactions, currentDate, initialBalance]);
+    if (transactions.length === 0) {
+      const rows = buildRows(monthStartDate, monthEndDate);
+      const enriched = addTotals(rows, initialBalance);
+      return new Map(enriched.map(row => [row.date, row]));
+    }
 
-  type BalanceSnapshot = { daily: number; cumulative: number };
-
-  const cashflowTotals = useMemo<Map<string, BalanceSnapshot>>(() => {
-    const rows: CashflowRow[] = daysInMonth.map(day => ({
-      date: formatDateKey(day),
-      salary: 0,
-      otherIncome: 0,
-      loans: 0,
-      withdrawals: 0,
-      expenses: 0,
-      taxes: 0,
-      bankAdjustments: 0,
+    const normalizedTransactions = transactions.map(t => ({
+      ...t,
+      date: formatDateKey(parseDateKey(t.date)),
     }));
 
+    const sortedDates = normalizedTransactions
+      .map(t => parseDateKey(t.date))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    const earliestDate = sortedDates[0] || monthStartDate;
+    const latestDate =
+      sortedDates[sortedDates.length - 1] || monthEndDate;
+
+    const rangeStart = new Date(
+      Math.min(earliestDate.getTime(), monthStartDate.getTime())
+    );
+    const rangeEnd = new Date(
+      Math.max(latestDate.getTime(), monthEndDate.getTime())
+    );
+
+    const rows = buildRows(rangeStart, rangeEnd);
     const rowMap = rows.reduce<Record<string, CashflowRow>>((acc, row) => {
       acc[row.date] = row;
       return acc;
     }, {});
 
-    transactions.forEach(t => {
+    normalizedTransactions.forEach(t => {
       const row = rowMap[t.date];
       if (!row) return;
 
       const rawAmount = Number(t.amount) || 0;
       const absoluteAmount = Math.abs(rawAmount);
 
-      if (t.group === 'fee') {
-        row.salary = (Number(row.salary) || 0) + absoluteAmount;
-        return;
-      }
-      if (t.group === 'other_income') {
-        row.otherIncome = (Number(row.otherIncome) || 0) + absoluteAmount;
-        return;
-      }
-      if (t.group === 'loan') {
-        row.loans = (Number(row.loans) || 0) + absoluteAmount;
-        return;
-      }
-      if (t.group === 'personal') {
-        row.withdrawals = (Number(row.withdrawals) || 0) + absoluteAmount;
-        return;
-      }
-      if (t.group === 'operational') {
-        row.expenses = (Number(row.expenses) || 0) + absoluteAmount;
-        return;
-      }
-      if (t.group === 'tax') {
-        row.taxes = (Number(row.taxes) || 0) + absoluteAmount;
-        return;
-      }
-      if (t.group === 'bank_adjustment') {
-        row.bankAdjustments =
-          (Number(row.bankAdjustments) || 0) + rawAmount;
-        return;
+      switch (t.group) {
+        case 'fee':
+          row.salary = (Number(row.salary) || 0) + absoluteAmount;
+          break;
+        case 'other_income':
+          row.otherIncome = (Number(row.otherIncome) || 0) + absoluteAmount;
+          break;
+        case 'loan':
+          row.loans = (Number(row.loans) || 0) + absoluteAmount;
+          break;
+        case 'personal':
+          row.withdrawals = (Number(row.withdrawals) || 0) + absoluteAmount;
+          break;
+        case 'operational':
+          row.expenses = (Number(row.expenses) || 0) + absoluteAmount;
+          break;
+        case 'tax':
+          row.taxes = (Number(row.taxes) || 0) + absoluteAmount;
+          break;
+        case 'bank_adjustment':
+          row.bankAdjustments =
+            (Number(row.bankAdjustments) || 0) + rawAmount;
+          break;
+        default:
+          break;
       }
     });
 
-    const enriched = addTotals(rows, monthStartBalance);
+    const enriched = addTotals(rows, initialBalance);
+    return new Map(enriched.map(row => [row.date, row]));
+  }, [transactions, monthStartDate, monthEndDate, initialBalance]);
+
+  // --- Financial Logic ---
+  const monthStartBalance = useMemo(() => {
+    const previousDay = new Date(monthStartDate);
+    previousDay.setDate(previousDay.getDate() - 1);
+    const previousRow = globalCashflowMap.get(formatDateKey(previousDay));
+    if (previousRow?.balance !== undefined) {
+      return previousRow.balance;
+    }
+    return initialBalance;
+  }, [globalCashflowMap, monthStartDate, initialBalance]);
+
+  type BalanceSnapshot = { daily: number; cumulative: number };
+
+  const cashflowTotals = useMemo<Map<string, BalanceSnapshot>>(() => {
     return new Map(
-      enriched.map(row => [
-        row.date,
-        {
-          daily: row.dailyTotal ?? 0,
-          cumulative: row.monthlyTotal ?? monthStartBalance,
-        },
-      ])
+      daysInMonth.map(day => {
+        const dateKey = formatDateKey(day);
+        const globalRow = globalCashflowMap.get(dateKey);
+        return [
+          dateKey,
+          {
+            daily: globalRow?.dailyTotal ?? 0,
+            cumulative: globalRow?.balance ?? monthStartBalance,
+          },
+        ];
+      })
     );
-  }, [daysInMonth, transactions, monthStartBalance]);
+  }, [daysInMonth, globalCashflowMap, monthStartBalance]);
 
   const dailyData = useMemo(() => {
     let runningBalance = monthStartBalance;
@@ -255,6 +313,38 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     }, empty);
   }, [dailyData]);
 
+  const operationalProfit = useMemo(() => {
+    return monthSummary.fee - monthSummary.operational;
+  }, [monthSummary]);
+
+  const netProfit = useMemo(() => {
+    return (monthSummary.fee + monthSummary.otherIncome) - (monthSummary.operational + monthSummary.tax);
+  }, [monthSummary]);
+
+  const netCashflow = useMemo(() => {
+    return (monthSummary.fee + monthSummary.otherIncome) - (monthSummary.operational + monthSummary.tax + monthSummary.loan + monthSummary.personal);
+  }, [monthSummary]);
+
+  const totalOperationalExpenses = useMemo(
+    () => monthSummary.operational + monthSummary.operationalPending,
+    [monthSummary]
+  );
+
+  const totalTaxes = useMemo(
+    () => monthSummary.tax + monthSummary.taxPending,
+    [monthSummary]
+  );
+
+  const totalLoans = useMemo(
+    () => monthSummary.loan + monthSummary.loanPending,
+    [monthSummary]
+  );
+
+  const totalWithdrawals = useMemo(
+    () => monthSummary.personal + monthSummary.personalPending,
+    [monthSummary]
+  );
+
   // --- Actions ---
   const handleCellClick = (dateStr: string, group: TransactionGroup, cellTransactions: Transaction[]) => {
     if (cellTransactions.length > 0) {
@@ -291,6 +381,36 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     setCurrentDate(newDate);
   };
 
+  const showCellTooltip = (
+    event: React.MouseEvent<HTMLTableCellElement, MouseEvent>,
+    title: string,
+    data: { transactions: Transaction[]; sum: number }
+  ) => {
+    const { clientX, clientY } = event;
+    setCellTooltip({
+      visible: true,
+      x: clientX + 16,
+      y: clientY + 16,
+      title,
+      total: data.sum,
+      transactions: data.transactions,
+    });
+  };
+
+  const moveCellTooltip = (event: React.MouseEvent<HTMLTableCellElement, MouseEvent>) => {
+    if (!cellTooltip.visible) return;
+    const { clientX, clientY } = event;
+    setCellTooltip(prev => ({
+      ...prev,
+      x: clientX + 16,
+      y: clientY + 16,
+    }));
+  };
+
+  const hideCellTooltip = () => {
+    setCellTooltip(prev => ({ ...prev, visible: false }));
+  };
+
   // --- Render ---
   return (
     <>
@@ -320,7 +440,31 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             </div>
             <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-center">
                 <span className="block text-xs text-blue-500 mb-1">תזרים נטו</span>
-                <span className="font-bold text-lg">{formatCurrency((monthSummary.fee + monthSummary.otherIncome) - (monthSummary.operational + monthSummary.tax + monthSummary.loan + monthSummary.personal))}</span>
+                <span className="font-bold text-lg">{formatCurrency(netCashflow)}</span>
+            </div>
+            <div className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 text-center">
+                <span className="block text-xs text-indigo-500 mb-1">רווח תפעולי</span>
+                <span className="font-bold text-lg">{formatCurrency(operationalProfit)}</span>
+            </div>
+            <div className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg border border-purple-100 text-center">
+                <span className="block text-xs text-purple-500 mb-1">רווח נטו</span>
+                <span className="font-bold text-lg">{formatCurrency(netProfit)}</span>
+            </div>
+            <div className="px-4 py-2 bg-slate-50 text-slate-700 rounded-lg border border-slate-200 text-center">
+                <span className="block text-xs text-slate-500 mb-1">סה"כ הוצאות</span>
+                <span className="font-bold text-lg">{formatCurrency(totalOperationalExpenses)}</span>
+            </div>
+            <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-lg border border-amber-200 text-center">
+                <span className="block text-xs text-amber-500 mb-1">סה"כ מיסים</span>
+                <span className="font-bold text-lg">{formatCurrency(totalTaxes)}</span>
+            </div>
+            <div className="px-4 py-2 bg-rose-50 text-rose-700 rounded-lg border border-rose-200 text-center">
+                <span className="block text-xs text-rose-500 mb-1">סה"כ הלוואות</span>
+                <span className="font-bold text-lg">{formatCurrency(totalLoans)}</span>
+            </div>
+            <div className="px-4 py-2 bg-pink-50 text-pink-700 rounded-lg border border-pink-200 text-center">
+                <span className="block text-xs text-pink-500 mb-1">סה"כ משיכות</span>
+                <span className="font-bold text-lg">{formatCurrency(totalWithdrawals)}</span>
             </div>
             <button 
               onClick={handleExportToCSV}
@@ -369,6 +513,9 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* FEE CELL */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'fee', day.fee.transactions)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'שכר טרחה', day.fee)}
+                                    onMouseMove={moveCellTooltip}
+                                    onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 relative hover:bg-slate-100 bg-emerald-50/30"
                                 >
                                     {day.fee.sum > 0 ? (
@@ -396,6 +543,9 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* OTHER INCOME CELL */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'other_income', day.otherIncome.transactions)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'הכנסות אחרות', day.otherIncome)}
+                                    onMouseMove={moveCellTooltip}
+                                    onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
                                 >
                                     {day.otherIncome.sum > 0 ? (
@@ -423,6 +573,9 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* OPERATIONAL */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'operational', day.operational.transactions)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'הוצאות תפעול', day.operational)}
+                                    onMouseMove={moveCellTooltip}
+                                    onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
                                 >
                                     {day.operational.sum > 0 ? (
@@ -439,6 +592,9 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* TAX */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'tax', day.tax.transactions)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'מיסים', day.tax)}
+                                    onMouseMove={moveCellTooltip}
+                                    onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
                                 >
                                     {day.tax.sum > 0 ? (
@@ -455,6 +611,9 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* LOAN */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'loan', day.loan.transactions)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'הלוואות', day.loan)}
+                                    onMouseMove={moveCellTooltip}
+                                    onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
                                 >
                                     {day.loan.sum > 0 ? (
@@ -471,6 +630,9 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* PERSONAL */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'personal', day.personal.transactions)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'משיכות', day.personal)}
+                                    onMouseMove={moveCellTooltip}
+                                    onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
                                 >
                                     {day.personal.sum > 0 ? (
@@ -487,6 +649,9 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 {/* BANK ADJUSTMENT */}
                                 <td 
                                     onClick={() => handleCellClick(day.dateStr, 'bank_adjustment', day.bankAdjustment.transactions)}
+                                    onMouseEnter={(e) => showCellTooltip(e, 'התאמות בנק', day.bankAdjustment)}
+                                    onMouseMove={moveCellTooltip}
+                                    onMouseLeave={hideCellTooltip}
                                     className="px-1 py-1 cursor-pointer group border-r border-slate-100 hover:bg-slate-100"
                                 >
                                     {day.bankAdjustment.sum !== 0 ? (
@@ -626,8 +791,51 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
         }}
         onToggleStatus={onToggleStatus}
         onUpdateTaxAmount={onUpdateTaxAmount}
+        onUpdateLoanAmount={onUpdateLoanAmount}
       />
     )}
+    {cellTooltip.visible &&
+      createPortal(
+        (() => {
+          const viewportWidth = typeof window === 'undefined' ? 0 : window.innerWidth;
+          const viewportHeight = typeof window === 'undefined' ? 0 : window.innerHeight;
+          const maxTop = viewportHeight ? viewportHeight - 150 : cellTooltip.y;
+          const maxLeft = viewportWidth ? viewportWidth - 260 : cellTooltip.x;
+          return (
+        <div
+          className="fixed z-[60] pointer-events-none"
+          style={{
+            top: Math.min(cellTooltip.y, maxTop),
+            left: Math.min(cellTooltip.x, maxLeft),
+          }}
+        >
+          <div className="bg-white/95 backdrop-blur rounded-xl shadow-2xl border border-slate-200 p-3 w-64 max-h-64 overflow-auto">
+            <div className="text-xs font-semibold text-slate-500 mb-2">
+              {cellTooltip.title}
+            </div>
+            {cellTooltip.transactions.length === 0 ? (
+              <p className="text-xs text-slate-400">אין תנועות ליום זה.</p>
+            ) : (
+              <ul className="space-y-1 text-xs text-slate-600">
+                {cellTooltip.transactions.map((transaction) => (
+                  <li key={transaction.id} className="flex justify-between gap-2">
+                    <span className="truncate">{transaction.description || transaction.category || 'ללא תיאור'}</span>
+                    <span className="font-semibold text-slate-800">
+                      ₪{transaction.amount.toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2 text-xs font-bold text-slate-900 border-t border-slate-100 pt-2">
+              סה"כ: ₪{cellTooltip.total.toLocaleString()}
+            </div>
+          </div>
+        </div>
+          );
+        })(),
+        document.body
+      )}
     </>
   );
 };
