@@ -466,6 +466,12 @@ const App: React.FC = () => {
           >
             ייצוא גיבוי
           </button>
+          <button
+            onClick={() => setIsBalanceModalOpen(true)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
+          >
+            עדכון יתרת פתיחה
+          </button>
           {importFeedback && (
             <div
               className={`text-xs px-3 py-2 rounded-lg border ${
