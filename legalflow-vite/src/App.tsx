@@ -839,8 +839,6 @@ const App: React.FC = () => {
             <Dashboard 
               transactions={transactions} 
               initialBalance={initialBalance}
-              currentBalance={calculateCurrentBalance()}
-              onEditInitialBalance={() => setIsBalanceModalOpen(true)}
             />
           )}
 

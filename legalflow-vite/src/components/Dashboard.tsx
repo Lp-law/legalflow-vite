@@ -15,8 +15,6 @@ import FeeSummaryModal from './FeeSummaryModal';
 interface DashboardProps {
   transactions: Transaction[];
   initialBalance: number;
-  currentBalance: number;
-  onEditInitialBalance: () => void;
 }
 
 const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
@@ -24,8 +22,6 @@ const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
 const Dashboard: React.FC<DashboardProps> = ({
   transactions,
   initialBalance,
-  currentBalance,
-  onEditInitialBalance,
 }) => {
   const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const today = useMemo(() => new Date(), []);
@@ -385,56 +381,23 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
-        <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
-          <div>
-            <p className="text-sm text-slate-500 font-medium">יתרה במערכת</p>
-            <p className="text-3xl font-bold text-slate-900 mt-1">
-              ₪{currentBalance.toLocaleString()}
-            </p>
-            <p className="text-xs text-slate-500 mt-2">
-              יתרה מתוזמנת מתבססת על נתוני המערכת והחזוי לסוף החודש.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <p className="text-xs text-slate-500">יתרה נוכחית</p>
-              <p className="text-xl font-bold text-slate-800 mt-1">₪{todaysBalance.toLocaleString()}</p>
-              <p className="text-[11px] text-slate-500 mt-1">נכון ל-{today.toLocaleDateString('he-IL')}</p>
-            </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <p className="text-xs text-slate-500">יתרה צפויה</p>
-              <p className="text-xl font-bold text-slate-800 mt-1">₪{monthEndBalance.toLocaleString()}</p>
-              <p className="text-[11px] text-slate-500 mt-1">סוף {endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={onEditInitialBalance}
-              className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg shadow-sm hover:bg-slate-800 transition-colors"
-            >
-              עדכן יתרת פתיחה
-            </button>
-          </div>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-500 mb-1">ניתוח שכר טרחה</p>
+          <p className="text-base text-slate-600">
+            עקוב אחר תרומת לקוחות מיוחדים לשכר הטרחה בתאריכים נבחרים.
+          </p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between gap-4 lg:w-[320px]">
-          <div>
-            <p className="text-sm font-medium text-slate-500 mb-1">ניתוח שכר טרחה</p>
-            <p className="text-base text-slate-600">
-              עקוב אחר תרומת לקוחות מיוחדים לשכר הטרחה בתאריכים נבחרים.
-            </p>
-          </div>
-          <button
-            onClick={() => setIsFeeSummaryOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-500 transition-colors"
-          >
-            סיכום שכר טרחה לפי סוג לקוח
-            <Download className="w-4 h-4" />
-          </button>
-        </div>
+        <button
+          onClick={() => setIsFeeSummaryOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-500 transition-colors"
+        >
+          סיכום שכר טרחה לפי סוג לקוח
+          <Download className="w-4 h-4" />
+        </button>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* KPI Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-8 gap-4">
         <BalanceHighlightCard
           title="יתרה נוכחית"
           value={todaysBalance}
@@ -449,25 +412,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           icon={Scale}
           accentBgClass="bg-amber-100"
           accentIconClass="text-amber-600"
-          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
-        />
-      </div>
-      {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
-        <KPICard 
-          title="יתרה נוכחית" 
-          value={todaysBalance} 
-          icon={Wallet}
-          accentBgClass="bg-blue-100"
-          accentTextClass="text-blue-600"
-          subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
-        />
-        <KPICard 
-          title="יתרה צפויה" 
-          value={monthEndBalance} 
-          icon={Scale} 
-          accentBgClass="bg-amber-100"
-          accentTextClass="text-amber-600"
           subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
         />
         <KPICard 
