@@ -331,17 +331,30 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     }, empty);
   }, [dailyData]);
 
-  const operationalProfit = useMemo(() => {
-    return monthSummary.fee - monthSummary.operational;
-  }, [monthSummary]);
+  const totalIncomeAllSources = useMemo(
+    () => monthSummary.fee + monthSummary.otherIncome,
+    [monthSummary.fee, monthSummary.otherIncome]
+  );
 
-  const netProfit = useMemo(() => {
-    return (monthSummary.fee + monthSummary.otherIncome) - (monthSummary.operational + monthSummary.tax);
-  }, [monthSummary]);
+  const operatingProfit = useMemo(
+    () => totalIncomeAllSources - monthSummary.operational,
+    [totalIncomeAllSources, monthSummary.operational]
+  );
 
-  const netCashflow = useMemo(() => {
-    return (monthSummary.fee + monthSummary.otherIncome) - (monthSummary.operational + monthSummary.tax + monthSummary.loan + monthSummary.personal);
-  }, [monthSummary]);
+  const netProfit = useMemo(
+    () =>
+      totalIncomeAllSources -
+      (monthSummary.operational + monthSummary.tax + monthSummary.loan + monthSummary.personal),
+    [
+      totalIncomeAllSources,
+      monthSummary.operational,
+      monthSummary.tax,
+      monthSummary.loan,
+      monthSummary.personal,
+    ]
+  );
+
+  const netCashflow = netProfit;
 
   const totalOperationalExpenses = useMemo(
     () => monthSummary.operational + monthSummary.operationalPending,
@@ -399,6 +412,26 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     setCurrentDate(newDate);
   };
 
+  const HeroKPI = ({
+    title,
+    value,
+    subtitle,
+    gradientClass,
+  }: {
+    title: string;
+    value: number;
+    subtitle: string;
+    gradientClass: string;
+  }) => (
+    <div className={`flex flex-col justify-between rounded-2xl shadow-lg text-white p-5 sm:p-6 min-w-[180px] sm:min-w-[220px] ${gradientClass}`}>
+      <div className="text-sm font-medium text-white/80">{subtitle}</div>
+      <div>
+        <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+        <p className="text-3xl sm:text-4xl font-bold mt-2 leading-tight">{formatCurrency(value)}</p>
+      </div>
+    </div>
+  );
+
   const showCellTooltip = (
     event: React.MouseEvent<HTMLTableCellElement, MouseEvent>,
     title: string,
@@ -454,7 +487,19 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             </button>
         </div>
 
-        <div className="flex flex-wrap gap-3 justify-center text-sm items-center">
+        <div className="flex flex-wrap gap-3 justify-center text-sm items-stretch w-full">
+            <HeroKPI
+                title="רווח תפעולי"
+                value={operatingProfit}
+                subtitle="חודש נוכחי"
+                gradientClass="bg-gradient-to-br from-emerald-500 to-emerald-600"
+            />
+            <HeroKPI
+                title="רווח נטו"
+                value={netProfit}
+                subtitle="חודש נוכחי"
+                gradientClass="bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500"
+            />
             <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 text-center">
                 <span className="block text-xs text-emerald-500 mb-1">סה"כ שכר טרחה</span>
                 <span className="font-bold text-lg">{formatCurrency(monthSummary.fee)}</span>
@@ -465,7 +510,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             </div>
             <div className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 text-center">
                 <span className="block text-xs text-indigo-500 mb-1">רווח תפעולי</span>
-                <span className="font-bold text-lg">{formatCurrency(operationalProfit)}</span>
+                <span className="font-bold text-lg">{formatCurrency(operatingProfit)}</span>
             </div>
             <div className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg border border-purple-100 text-center">
                 <span className="block text-xs text-purple-500 mb-1">רווח נטו</span>
