@@ -13,6 +13,7 @@ interface MonthlyFlowProps {
   initialBalance: number;
   onDeleteTransaction: (id: string) => void;
   openTransactionForm: (date?: string, type?: 'income' | 'expense', group?: TransactionGroup) => void;
+  onEditTransaction: (transaction: Transaction) => void;
   onToggleStatus: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount: (id: string, amount: number) => void;
   onUpdateLoanAmount: (id: string, amount: number) => void;
@@ -54,6 +55,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   initialBalance, 
   onDeleteTransaction,
   openTransactionForm,
+  onEditTransaction,
   onToggleStatus,
   onUpdateTaxAmount,
   onUpdateLoanAmount
@@ -807,6 +809,11 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
              setDetailModalOpen(false);
              const type = (selectedCell.group === 'fee' || selectedCell.group === 'other_income') ? 'income' : 'expense';
              openTransactionForm(selectedCell.date, type, selectedCell.group);
+        }}
+        onEdit={(transaction) => {
+          onEditTransaction(transaction);
+          setDetailModalOpen(false);
+          setSelectedCell(null);
         }}
         onToggleStatus={onToggleStatus}
         onUpdateTaxAmount={onUpdateTaxAmount}

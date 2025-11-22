@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus } from 'lucide-react';
+import { X, Trash2, Plus, Pencil } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
 
 interface DailyDetailModalProps {
@@ -10,6 +10,7 @@ interface DailyDetailModalProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
   onAdd: () => void;
+  onEdit?: (transaction: Transaction) => void;
   onToggleStatus?: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount?: (id: string, amount: number) => void;
   onUpdateLoanAmount?: (id: string, amount: number) => void;
@@ -23,6 +24,7 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
   transactions,
   onDelete,
   onAdd,
+  onEdit,
   onToggleStatus,
   onUpdateTaxAmount,
   onUpdateLoanAmount
@@ -267,6 +269,15 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
                 </div>
                 
                 <div className="flex gap-2 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {onEdit && (
+                    <button
+                      onClick={() => onEdit(t)}
+                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+                      title="ערוך"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
                   <button 
                     onClick={() => onDelete(t.id)}
                     className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"

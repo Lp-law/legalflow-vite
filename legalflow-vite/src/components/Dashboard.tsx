@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, 
-  Cell, PieChart, Pie, Legend
+  Cell, PieChart, Pie
 } from 'recharts';
 import type { Transaction } from '../types';
 import { CATEGORIES } from '../constants';
@@ -29,6 +29,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const today = useMemo(() => new Date(), []);
+  const todayKey = useMemo(() => formatDateKey(today), [today]);
   const startOfMonth = useMemo(
     () => new Date(today.getFullYear(), today.getMonth(), 1),
     [today]
@@ -133,12 +134,27 @@ const Dashboard: React.FC<DashboardProps> = ({
     return addTotals(rows, monthStartBalance);
   }, [daysInMonth, monthTransactions, monthStartBalance]);
 
-  const flowCurrentBalance = useMemo(() => {
+  const monthEndBalance = useMemo(() => {
     if (cashflowRows.length === 0) {
       return monthStartBalance;
     }
-    return cashflowRows[cashflowRows.length - 1].monthlyTotal ?? monthStartBalance;
+    return cashflowRows[cashflowRows.length - 1].balance ?? monthStartBalance;
   }, [cashflowRows, monthStartBalance]);
+
+  const todaysBalance = useMemo(() => {
+    if (cashflowRows.length === 0) {
+      return monthStartBalance;
+    }
+    let lastKnown = monthStartBalance;
+    for (const row of cashflowRows) {
+      if (row.date <= todayKey) {
+        lastKnown = row.balance ?? lastKnown;
+      } else {
+        break;
+      }
+    }
+    return lastKnown;
+  }, [cashflowRows, monthStartBalance, todayKey]);
 
   const incomeTotal = useMemo(() => {
     return cashflowRows.reduce((sum, row) => {
@@ -225,9 +241,9 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // --- Calculations ---
   const summary = useMemo(() => {
-    const net = flowCurrentBalance - monthStartBalance;
+    const net = monthEndBalance - monthStartBalance;
     return { income: incomeTotal, expenses: expenseTotal, net };
-  }, [flowCurrentBalance, monthStartBalance, incomeTotal, expenseTotal]);
+  }, [monthEndBalance, monthStartBalance, incomeTotal, expenseTotal]);
 
   const chartData = useMemo(() => {
     if (cashflowRows.length === 0) {
@@ -280,13 +296,29 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // --- Components ---
 
-  const KPICard = ({ title, value, icon: Icon, trend, colorClass }: any) => (
+  const KPICard = ({
+    title,
+    value,
+    icon: Icon,
+    trend,
+    accentBgClass = 'bg-blue-100',
+    accentTextClass = 'text-blue-600',
+    subtitle,
+  }: {
+    title: string;
+    value: number;
+    icon: React.ComponentType<any>;
+    trend?: number;
+    accentBgClass?: string;
+    accentTextClass?: string;
+    subtitle?: string;
+  }) => (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start mb-4">
-        <div className={`p-3 rounded-lg ${colorClass} bg-opacity-10`}>
-          <Icon className={`w-6 h-6 ${colorClass.replace('bg-', 'text-')}`} />
+        <div className={`p-3 rounded-lg ${accentBgClass}`}>
+          <Icon className={`w-6 h-6 ${accentTextClass}`} />
         </div>
-        {trend && (
+        {typeof trend === 'number' && (
           <span className={`text-sm font-medium ${trend > 0 ? 'text-green-600' : 'text-red-600'} flex items-center`}>
             {trend > 0 ? '+' : ''}{trend}%
             {trend > 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
@@ -295,13 +327,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
       <h3 className="text-slate-500 text-sm font-medium mb-1">{title}</h3>
       <p className="text-2xl font-bold text-slate-800">₪{value.toLocaleString()}</p>
+      {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
     </div>
   );
 
   const handleExportDashboard = () => {
     const headers = ['חלק', 'תיאור', 'ערך', 'פרטים נוספים'];
     const rows: (string | number)[][] = [
-      ['KPI', 'יתרה נוכחית (תזרים)', flowCurrentBalance, `יתרת פתיחה: ₪${monthStartBalance.toLocaleString()}`],
+      ['KPI', 'יתרה נוכחית (תזרים)', todaysBalance, `יתרת פתיחה: ₪${monthStartBalance.toLocaleString()}`],
       ['KPI', 'סה"כ הכנסות', summary.income, ''],
       ['KPI', 'סה"כ הוצאות', summary.expenses, ''],
       ['KPI', 'התאמות בנק נטו', bankAdjustmentNet, '']
@@ -333,13 +366,25 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
         <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
           <div>
-            <p className="text-sm text-slate-500 font-medium">יתרה נוכחית</p>
+            <p className="text-sm text-slate-500 font-medium">יתרה במערכת</p>
             <p className="text-3xl font-bold text-slate-900 mt-1">
               ₪{currentBalance.toLocaleString()}
             </p>
             <p className="text-xs text-slate-500 mt-2">
-              יתרה לפי דוח: ₪{(flowCurrentBalance || 0).toLocaleString()} · יתרת פתיחה: ₪{monthStartBalance.toLocaleString()}
+              יתרה מתוזמנת מתבססת על נתוני המערכת והחזוי לסוף החודש.
             </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-xs text-slate-500">יתרה נוכחית</p>
+              <p className="text-xl font-bold text-slate-800 mt-1">₪{todaysBalance.toLocaleString()}</p>
+              <p className="text-[11px] text-slate-500 mt-1">נכון ל-{today.toLocaleDateString('he-IL')}</p>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-xs text-slate-500">יתרה צפויה</p>
+              <p className="text-xl font-bold text-slate-800 mt-1">₪{monthEndBalance.toLocaleString()}</p>
+              <p className="text-[11px] text-slate-500 mt-1">סוף {endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}</p>
+            </div>
           </div>
           <div className="flex flex-wrap gap-3">
             <button
@@ -370,41 +415,56 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
         <KPICard 
           title="יתרה נוכחית" 
-          value={flowCurrentBalance || currentBalance} 
-          icon={Wallet} 
-          colorClass="bg-blue-600" // Simplified color handling
+          value={todaysBalance} 
+          icon={Wallet}
+          accentBgClass="bg-blue-100"
+          accentTextClass="text-blue-600"
+          subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
+        />
+        <KPICard 
+          title="יתרה צפויה" 
+          value={monthEndBalance} 
+          icon={Scale} 
+          accentBgClass="bg-amber-100"
+          accentTextClass="text-amber-600"
+          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
         />
         <KPICard 
           title="הכנסות החודש" 
           value={summary.income} 
           icon={TrendingUp} 
           trend={12} 
-          colorClass="bg-emerald-600"
+          accentBgClass="bg-emerald-100"
+          accentTextClass="text-emerald-600"
         />
         <KPICard 
           title="הוצאות החודש" 
           value={summary.expenses} 
           icon={TrendingDown} 
           trend={-5} 
-          colorClass="bg-red-600"
+          accentBgClass="bg-red-100"
+          accentTextClass="text-red-600"
         />
         <KPICard 
           title="תזרים נטו" 
           value={summary.net} 
           icon={Scale} 
-          colorClass="bg-purple-600"
+          accentBgClass="bg-purple-100"
+          accentTextClass="text-purple-600"
         />
         <KPICard 
           title="רווח תפעולי" 
           value={operatingProfit}
           icon={Activity}
-          colorClass="bg-indigo-600"
+          accentBgClass="bg-indigo-100"
+          accentTextClass="text-indigo-600"
         />
         <KPICard 
           title="רווח נטו" 
           value={netProfit}
           icon={Scale}
-          colorClass="bg-slate-700"
+          accentBgClass="bg-slate-100"
+          accentTextClass="text-slate-700"
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
@@ -412,37 +472,43 @@ const Dashboard: React.FC<DashboardProps> = ({
           title={'סה"כ שכר טרחה'}
           value={totalsByGroup.fee}
           icon={TrendingUp}
-          colorClass="bg-emerald-600/80"
+          accentBgClass="bg-emerald-100"
+          accentTextClass="text-emerald-600"
         />
         <KPICard 
           title={'סה"כ הכנסות אחרות'}
           value={totalsByGroup.otherIncome}
           icon={TrendingUp}
-          colorClass="bg-teal-600"
+          accentBgClass="bg-teal-100"
+          accentTextClass="text-teal-600"
         />
         <KPICard 
           title={'סה"כ הוצאות'}
           value={totalsByGroup.operational}
           icon={TrendingDown}
-          colorClass="bg-amber-600"
+          accentBgClass="bg-amber-100"
+          accentTextClass="text-amber-600"
         />
         <KPICard 
           title={'סה"כ מיסים'}
           value={totalsByGroup.taxes}
           icon={Info}
-          colorClass="bg-yellow-600"
+          accentBgClass="bg-yellow-100"
+          accentTextClass="text-yellow-600"
         />
         <KPICard 
           title={'סה"כ הלוואות'}
           value={totalsByGroup.loans}
           icon={TrendingDown}
-          colorClass="bg-rose-600"
+          accentBgClass="bg-rose-100"
+          accentTextClass="text-rose-600"
         />
         <KPICard 
           title={'סה"כ משיכות'}
           value={totalsByGroup.withdrawals}
           icon={TrendingDown}
-          colorClass="bg-pink-600"
+          accentBgClass="bg-pink-100"
+          accentTextClass="text-pink-600"
         />
       </div>
 
@@ -506,27 +572,41 @@ const Dashboard: React.FC<DashboardProps> = ({
         {/* Expenses Breakdown */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <h3 className="text-lg font-bold text-slate-800 mb-6">התפלגות הוצאות</h3>
-          <div className="h-[300px] w-full">
+          <div className="h-[320px] w-full">
              {expensesByCategory.length > 0 ? (
-               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={expensesByCategory}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {expensesByCategory.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip formatter={(value: number) => `₪${value.toLocaleString()}`} />
-                  <Legend layout="vertical" verticalAlign="bottom" align="center" iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
+               <div className="h-full flex flex-col lg:flex-row gap-4">
+                 <div className="flex-1 h-[220px] lg:h-full">
+                   <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={expensesByCategory}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={90}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {expensesByCategory.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip formatter={(value: number) => `₪${value.toLocaleString()}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                 </div>
+                 <div className="lg:w-56 max-h-[300px] overflow-auto space-y-2 pr-1">
+                   {expensesByCategory.map(cat => (
+                     <div key={cat.name} className="flex items-center justify-between gap-2 text-sm text-slate-700">
+                       <div className="flex items-center gap-2">
+                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></span>
+                         <span className="truncate">{cat.name}</span>
+                       </div>
+                       <span className="font-semibold text-slate-900">₪{cat.value.toLocaleString()}</span>
+                     </div>
+                   ))}
+                 </div>
+               </div>
              ) : (
                <div className="h-full flex flex-col items-center justify-center text-slate-400">
                  <Info className="w-8 h-8 mb-2" />

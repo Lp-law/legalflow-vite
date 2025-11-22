@@ -9,9 +9,11 @@ interface TransactionFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (transactions: Omit<Transaction, 'id'>[]) => void;
+  onSubmitEdit?: (transaction: Transaction) => void;
   initialDate?: string;
   initialType?: 'income' | 'expense';
   initialGroup?: TransactionGroup;
+  transactionToEdit?: Transaction | null;
 }
 
 const sanitizeNumericInput = (value: string) => {
@@ -28,10 +30,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   isOpen, 
   onClose, 
   onSubmit,
+  onSubmitEdit,
   initialDate,
   initialType,
-  initialGroup
+  initialGroup,
+  transactionToEdit
 }) => {
+  const isEditing = Boolean(transactionToEdit);
   const [type, setType] = useState<'income' | 'expense'>('income');
   const [group, setGroup] = useState<TransactionGroup>('fee');
   
@@ -63,47 +68,70 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   // Here we just create standard transactions.
 
   useEffect(() => {
-    if (isOpen) {
-      setAvailableCategories(getAllCategories());
-      setAvailableClients(getClients());
+    if (!isOpen) return;
 
-      if (initialDate) setDate(initialDate);
-      
-      if (initialGroup) {
-          setGroup(initialGroup);
-          setType((initialGroup === 'fee' || initialGroup === 'other_income') ? 'income' : 'expense');
-      } else if (initialType) {
-          setType(initialType);
-          setGroup(initialType === 'income' ? 'fee' : 'operational');
-      } else {
-          setType('income');
-          setGroup('fee');
-      }
-      
-      setAmount('');
-      setIsAmountManual(false);
-      setDescription('');
-      setCategory('');
-      setClientReference('');
-      setPaymentMethod('transfer');
-      
-      // Defaults
-      if (initialType === 'income' || (!initialType && !initialGroup)) {
-          setStatus('pending');
-      } else {
-          setStatus('completed');
-      }
+    setAvailableCategories(getAllCategories());
+    setAvailableClients(getClients());
 
+    if (transactionToEdit) {
+      setDate(transactionToEdit.date || formatDateKey(new Date()));
+      setType(transactionToEdit.type);
+      setGroup(transactionToEdit.group);
+      setAmount(transactionToEdit.amount.toString());
+      setIsAmountManual(true);
+      setDescription(transactionToEdit.description || '');
+      setCategory(transactionToEdit.category || '');
+      setClientReference(transactionToEdit.clientReference || '');
+      setPaymentMethod((transactionToEdit.paymentMethod as string) || 'transfer');
+      setStatus(transactionToEdit.status || 'completed');
+      setLoanEndMonth(transactionToEdit.loanEndMonth || '');
       setIsRecurring(false);
       setRecurringMonths(12);
-      setLoanEndMonth('');
-      
       setIsAddingCategory(false);
       setNewCategoryName('');
       setIsAddingClient(false);
       setNewClientName('');
+      return;
     }
-  }, [isOpen, initialDate, initialType, initialGroup]);
+
+    if (initialDate) {
+      setDate(initialDate);
+    } else {
+      setDate(formatDateKey(new Date()));
+    }
+
+    if (initialGroup) {
+      setGroup(initialGroup);
+      setType((initialGroup === 'fee' || initialGroup === 'other_income') ? 'income' : 'expense');
+    } else if (initialType) {
+      setType(initialType);
+      setGroup(initialType === 'income' ? 'fee' : 'operational');
+    } else {
+      setType('income');
+      setGroup('fee');
+    }
+
+    setAmount('');
+    setIsAmountManual(false);
+    setDescription('');
+    setCategory('');
+    setClientReference('');
+    setPaymentMethod('transfer');
+
+    if (initialType === 'income' || (!initialType && !initialGroup)) {
+      setStatus('pending');
+    } else {
+      setStatus('completed');
+    }
+
+    setIsRecurring(false);
+    setRecurringMonths(12);
+    setLoanEndMonth('');
+    setIsAddingCategory(false);
+    setNewCategoryName('');
+    setIsAddingClient(false);
+    setNewClientName('');
+  }, [isOpen, initialDate, initialType, initialGroup, transactionToEdit]);
 
   const handleTypeChange = (newType: 'income' | 'expense') => {
       setType(newType);
@@ -188,9 +216,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const absoluteAmount = Math.abs(parsedAmount);
     const effectiveAmount = group === 'bank_adjustment' ? parsedAmount : absoluteAmount;
 
+    if (transactionToEdit && onSubmitEdit) {
+      const editedTransaction: Transaction = {
+        ...transactionToEdit,
+        amount: effectiveAmount,
+        type,
+        group,
+        category: finalCategory,
+        description: finalDescription,
+        clientReference,
+        paymentMethod: paymentMethod as any,
+        status,
+        isManualOverride,
+        loanEndMonth: group === 'loan' ? (loanEndMonth || undefined) : undefined,
+        date,
+      };
+      onSubmitEdit(editedTransaction);
+      onClose();
+      return;
+    }
+
     const transactionsToCreate: Omit<Transaction, 'id'>[] = [];
 
-  const baseTransaction = {
+    const baseTransaction = {
       amount: effectiveAmount,
       type,
       group,
@@ -205,22 +253,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     };
 
     if (isRecurring) {
-        const startDate = new Date(date);
-        for (let i = 0; i < recurringMonths; i++) {
-            const nextDate = new Date(startDate);
-            nextDate.setMonth(startDate.getMonth() + i);
-            
-            transactionsToCreate.push({
-                ...baseTransaction,
-                date: formatDateKey(nextDate),
-                status: i === 0 ? status : 'pending' 
-            });
-        }
-    } else {
+      const startDate = new Date(date);
+      for (let i = 0; i < recurringMonths; i++) {
+        const nextDate = new Date(startDate);
+        nextDate.setMonth(startDate.getMonth() + i);
         transactionsToCreate.push({
-            ...baseTransaction,
-            date
+          ...baseTransaction,
+          date: formatDateKey(nextDate),
+          status: i === 0 ? status : 'pending'
         });
+      }
+    } else {
+      transactionsToCreate.push({
+        ...baseTransaction,
+        date
+      });
     }
 
     onSubmit(transactionsToCreate);
@@ -235,9 +282,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         
         <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
           <h2 className="text-xl font-bold text-slate-800">
-            {initialGroup 
-              ? 'הוספת תנועה'
-              : 'הוספת תנועה חדשה'}
+            {isEditing ? 'עריכת תנועה' : initialGroup ? 'הוספת תנועה' : 'הוספת תנועה חדשה'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X className="w-6 h-6" />
@@ -560,6 +605,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     </div>
                 </div>
 
+                {!isEditing && (
                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 transition-all">
                     <div className="flex items-center gap-3 mb-2">
                          <input 
@@ -590,6 +636,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                          </div>
                     )}
                 </div>
+                )}
             </div>
 
           </form>
@@ -607,7 +654,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             type="submit"
             className="px-6 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors shadow-sm flex items-center gap-2"
           >
-            {isRecurring ? `צור ${recurringMonths} תנועות` : 'שמור תנועה'}
+            {isEditing ? 'שמור שינויים' : isRecurring ? `צור ${recurringMonths} תנועות` : 'שמור תנועה'}
           </button>
         </div>
       </div>

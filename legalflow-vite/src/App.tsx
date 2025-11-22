@@ -90,6 +90,7 @@ const App: React.FC = () => {
   const [formInitialDate, setFormInitialDate] = useState<string | undefined>(undefined);
   const [formInitialType, setFormInitialType] = useState<'income' | 'expense' | undefined>(undefined);
   const [formInitialGroup, setFormInitialGroup] = useState<TransactionGroup | undefined>(undefined);
+  const [transactionBeingEdited, setTransactionBeingEdited] = useState<Transaction | null>(null);
   const isRestoringFromCloud = useRef(false);
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
   const [balanceDraft, setBalanceDraft] = useState(() => getInitialBalance().toString());
@@ -221,6 +222,30 @@ const App: React.FC = () => {
       updateTransactionsWithSync(updatedList);
   };
 
+  const handleSubmitEditedTransaction = (updatedTransaction: Transaction) => {
+    const normalizedAmount =
+      updatedTransaction.group === 'bank_adjustment'
+        ? updatedTransaction.amount
+        : Math.abs(updatedTransaction.amount);
+
+    const normalizedTransaction: Transaction = {
+      ...updatedTransaction,
+      amount: normalizedAmount,
+    };
+
+    if (normalizedTransaction.group === 'loan') {
+      rememberLoanOverride(normalizedTransaction.id, Math.abs(normalizedTransaction.amount));
+    } else {
+      removeLoanOverride(normalizedTransaction.id);
+    }
+
+    const nextTransactions = transactions.map(tx =>
+      tx.id === normalizedTransaction.id ? normalizedTransaction : tx
+    );
+    updateTransactionsWithSync(nextTransactions);
+    setTransactionBeingEdited(null);
+  };
+
   const handleDeleteTransaction = (id: string) => {
     if(window.confirm('האם אתה בטוח שברצונך למחוק תנועה זו?')) {
         const target = transactions.find(t => t.id === id);
@@ -293,14 +318,24 @@ const App: React.FC = () => {
   };
 
   const openTransactionForm = (date?: string, type?: 'income' | 'expense', group?: TransactionGroup) => {
+    setTransactionBeingEdited(null);
     setFormInitialDate(date || formatDateKey(new Date()));
     setFormInitialType(type);
     setFormInitialGroup(group);
     setIsFormOpen(true);
   };
 
+  const handleEditTransactionRequest = (transaction: Transaction) => {
+    setTransactionBeingEdited(transaction);
+    setFormInitialDate(undefined);
+    setFormInitialType(undefined);
+    setFormInitialGroup(undefined);
+    setIsFormOpen(true);
+  };
+
   const handleCloseForm = () => {
     setIsFormOpen(false);
+    setTransactionBeingEdited(null);
     setTimeout(() => {
       setFormInitialDate(undefined);
       setFormInitialType(undefined);
@@ -782,15 +817,6 @@ const App: React.FC = () => {
               </p>
             </div>
             
-            <div className="flex gap-3">
-              <button 
-                onClick={() => openTransactionForm()}
-                className="flex items-center gap-2 px-4 py-2 bg-[#d4af37] text-white rounded-lg hover:bg-[#b5952f] transition-all shadow-lg hover:shadow-xl text-sm font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                תנועה חדשה
-              </button>
-            </div>
           </div>
         )}
 
@@ -802,6 +828,7 @@ const App: React.FC = () => {
               initialBalance={initialBalance}
               onDeleteTransaction={handleDeleteTransaction}
               openTransactionForm={openTransactionForm}
+            onEditTransaction={handleEditTransactionRequest}
               onToggleStatus={handleToggleTransactionStatus}
               onUpdateTaxAmount={handleUpdateTaxAmount}
               onUpdateLoanAmount={handleUpdateLoanAmount}
@@ -854,10 +881,12 @@ const App: React.FC = () => {
       <TransactionForm 
         isOpen={isFormOpen} 
         onClose={handleCloseForm} 
-        onSubmit={handleAddTransactionBatch} 
-        initialDate={formInitialDate}
-        initialType={formInitialType}
-        initialGroup={formInitialGroup}
+        onSubmit={handleAddTransactionBatch}
+        onSubmitEdit={handleSubmitEditedTransaction}
+        initialDate={transactionBeingEdited ? undefined : formInitialDate}
+        initialType={transactionBeingEdited ? undefined : formInitialType}
+        initialGroup={transactionBeingEdited ? undefined : formInitialGroup}
+        transactionToEdit={transactionBeingEdited}
       />
 
       {isMobileActionsOpen && (
