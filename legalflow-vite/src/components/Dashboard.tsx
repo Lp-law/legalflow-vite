@@ -322,33 +322,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     </div>
   );
 
-  const BalanceHighlightCard = ({
-    title,
-    value,
-    icon: Icon,
-    accentBgClass,
-    accentIconClass,
-    subtitle,
-  }: {
-    title: string;
-    value: number;
-    icon: React.ComponentType<any>;
-    accentBgClass: string;
-    accentIconClass: string;
-    subtitle?: string;
-  }) => (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 text-center space-y-3">
-      <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${accentBgClass}`}>
-        <Icon className={`w-6 h-6 ${accentIconClass}`} />
-      </div>
-      <div>
-        <p className="text-sm text-slate-500">{title}</p>
-        <p className="text-3xl font-bold text-slate-900 mt-1">₪{value.toLocaleString()}</p>
-        {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
-      </div>
-    </div>
-  );
-
   const handleExportDashboard = () => {
     const headers = ['חלק', 'תיאור', 'ערך', 'פרטים נוספים'];
     const rows: (string | number)[][] = [
@@ -381,37 +354,22 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500 mb-1">ניתוח שכר טרחה</p>
-          <p className="text-base text-slate-600">
-            עקוב אחר תרומת לקוחות מיוחדים לשכר הטרחה בתאריכים נבחרים.
-          </p>
-        </div>
-        <button
-          onClick={() => setIsFeeSummaryOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-500 transition-colors"
-        >
-          סיכום שכר טרחה לפי סוג לקוח
-          <Download className="w-4 h-4" />
-        </button>
-      </div>
       {/* KPI Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-8 gap-4">
-        <BalanceHighlightCard
-          title="יתרה נוכחית"
-          value={todaysBalance}
+        <KPICard 
+          title="יתרה נוכחית" 
+          value={todaysBalance} 
           icon={Wallet}
           accentBgClass="bg-blue-100"
-          accentIconClass="text-blue-600"
+          accentTextClass="text-blue-700"
           subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
         />
-        <BalanceHighlightCard
-          title="יתרה צפויה"
-          value={monthEndBalance}
-          icon={Scale}
+        <KPICard 
+          title="יתרה צפויה" 
+          value={monthEndBalance} 
+          icon={Scale} 
           accentBgClass="bg-amber-100"
-          accentIconClass="text-amber-600"
+          accentTextClass="text-amber-700"
           subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
         />
         <KPICard 
@@ -451,6 +409,21 @@ const Dashboard: React.FC<DashboardProps> = ({
           accentBgClass="bg-slate-100"
           accentTextClass="text-slate-700"
         />
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-500 mb-1">ניתוח שכר טרחה</p>
+          <p className="text-base text-slate-600">
+            עקוב אחר תרומת לקוחות מיוחדים לשכר הטרחה בתאריכים נבחרים.
+          </p>
+        </div>
+        <button
+          onClick={() => setIsFeeSummaryOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-500 transition-colors"
+        >
+          סיכום שכר טרחה לפי סוג לקוח
+          <Download className="w-4 h-4" />
+        </button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
         <KPICard 
