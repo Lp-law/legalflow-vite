@@ -49,22 +49,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     return days;
   }, [startOfMonth]);
 
-  const completedTransactions = useMemo(
-    () => transactions.filter(t => t.status === 'completed'),
-    [transactions]
-  );
-
   const monthTransactions = useMemo(
     () =>
-      completedTransactions.filter(t => {
+      transactions.filter(t => {
         const tDate = parseDateKey(t.date);
         return tDate >= startOfMonth && tDate <= endOfMonth;
       }),
-    [completedTransactions, startOfMonth, endOfMonth]
+    [transactions, startOfMonth, endOfMonth]
   );
 
   const monthStartBalance = useMemo(() => {
-    const previousTransactions = completedTransactions.filter(t => {
+    const previousTransactions = transactions.filter(t => {
       const tDate = parseDateKey(t.date);
       return tDate < startOfMonth;
     });
@@ -78,7 +73,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       .reduce((sum, t) => sum + t.amount, 0);
 
     return initialBalance + prevIncome - prevExpense;
-  }, [completedTransactions, startOfMonth, initialBalance]);
+  }, [transactions, startOfMonth, initialBalance]);
 
   const cashflowRows = useMemo(() => {
     const rows: CashflowRow[] = daysInMonth.map(day => ({
@@ -266,7 +261,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       return {
         date: row.date,
-        balance: row.monthlyTotal ?? monthStartBalance,
+        balance: row.balance ?? monthStartBalance,
         income,
         expense,
       };
@@ -328,6 +323,33 @@ const Dashboard: React.FC<DashboardProps> = ({
       <h3 className="text-slate-500 text-sm font-medium mb-1">{title}</h3>
       <p className="text-2xl font-bold text-slate-800">₪{value.toLocaleString()}</p>
       {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
+    </div>
+  );
+
+  const BalanceHighlightCard = ({
+    title,
+    value,
+    icon: Icon,
+    accentBgClass,
+    accentIconClass,
+    subtitle,
+  }: {
+    title: string;
+    value: number;
+    icon: React.ComponentType<any>;
+    accentBgClass: string;
+    accentIconClass: string;
+    subtitle?: string;
+  }) => (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 text-center space-y-3">
+      <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${accentBgClass}`}>
+        <Icon className={`w-6 h-6 ${accentIconClass}`} />
+      </div>
+      <div>
+        <p className="text-sm text-slate-500">{title}</p>
+        <p className="text-3xl font-bold text-slate-900 mt-1">₪{value.toLocaleString()}</p>
+        {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
+      </div>
     </div>
   );
 
@@ -410,6 +432,25 @@ const Dashboard: React.FC<DashboardProps> = ({
             <Download className="w-4 h-4" />
           </button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <BalanceHighlightCard
+          title="יתרה נוכחית"
+          value={todaysBalance}
+          icon={Wallet}
+          accentBgClass="bg-blue-100"
+          accentIconClass="text-blue-600"
+          subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
+        />
+        <BalanceHighlightCard
+          title="יתרה צפויה"
+          value={monthEndBalance}
+          icon={Scale}
+          accentBgClass="bg-amber-100"
+          accentIconClass="text-amber-600"
+          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
+        />
       </div>
       {/* KPI Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
