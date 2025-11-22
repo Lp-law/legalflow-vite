@@ -412,7 +412,32 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     setCurrentDate(newDate);
   };
 
-  const HeroKPI = ({
+  const today = new Date();
+  const todayKey = formatDateKey(today);
+  const todayInSelectedMonth =
+    today >= monthStartDate && today <= monthEndDate;
+  const monthLabel = currentDate.toLocaleDateString('he-IL', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const lastDayEntry = dailyData[dailyData.length - 1];
+  const todayEntry = dailyData.find(day => day.dateStr === todayKey);
+
+  const currentBalanceEntry =
+    todayInSelectedMonth && todayEntry ? todayEntry : lastDayEntry;
+
+  const heroCurrentBalanceValue =
+    currentBalanceEntry?.balance ?? monthStartBalance;
+  const heroCurrentSubtitle =
+    todayInSelectedMonth && currentBalanceEntry?.date
+      ? `נכון ל-${formatDate(currentBalanceEntry.date)}`
+      : `יתרה לחודש ${monthLabel}`;
+
+  const heroMonthEndBalanceValue = lastDayEntry?.balance ?? monthStartBalance;
+  const heroMonthEndSubtitle = `סוף ${formatDate(monthEndDate)}`;
+
+  const BalanceHeroCard = ({
     title,
     value,
     subtitle,
@@ -423,11 +448,15 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     subtitle: string;
     gradientClass: string;
   }) => (
-    <div className={`flex flex-col justify-between rounded-2xl shadow-lg text-white p-5 sm:p-6 min-w-[180px] sm:min-w-[220px] ${gradientClass}`}>
+    <div
+      className={`flex flex-col justify-between rounded-2xl shadow-lg text-white p-5 sm:p-6 min-w-[220px] flex-1 basis-[240px] ${gradientClass}`}
+    >
       <div className="text-sm font-medium text-white/80">{subtitle}</div>
       <div>
         <h3 className="text-base font-semibold tracking-tight">{title}</h3>
-        <p className="text-3xl sm:text-4xl font-bold mt-2 leading-tight">{formatCurrency(value)}</p>
+        <p className="text-3xl sm:text-4xl font-bold mt-2 leading-tight">
+          {formatCurrency(value)}
+        </p>
       </div>
     </div>
   );
@@ -487,19 +516,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             </button>
         </div>
 
-        <div className="flex flex-wrap gap-3 justify-center text-sm items-stretch w-full">
-            <HeroKPI
-                title="רווח תפעולי"
-                value={operatingProfit}
-                subtitle="חודש נוכחי"
-                gradientClass="bg-gradient-to-br from-emerald-500 to-emerald-600"
-            />
-            <HeroKPI
-                title="רווח נטו"
-                value={netProfit}
-                subtitle="חודש נוכחי"
-                gradientClass="bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500"
-            />
+        <div className="flex flex-wrap gap-3 justify-end text-sm items-stretch w-full">
             <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 text-center">
                 <span className="block text-xs text-emerald-500 mb-1">סה"כ שכר טרחה</span>
                 <span className="font-bold text-lg">{formatCurrency(monthSummary.fee)}</span>
@@ -539,6 +556,18 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">אקסל</span>
             </button>
+            <BalanceHeroCard
+              title="יתרה נוכחית"
+              value={heroCurrentBalanceValue}
+              subtitle={heroCurrentSubtitle}
+              gradientClass="bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500"
+            />
+            <BalanceHeroCard
+              title="יתרה צפויה לסוף החודש"
+              value={heroMonthEndBalanceValue}
+              subtitle={heroMonthEndSubtitle}
+              gradientClass="bg-gradient-to-br from-emerald-600 to-lime-500"
+            />
         </div>
       </div>
 
