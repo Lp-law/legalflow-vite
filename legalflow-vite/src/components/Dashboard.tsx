@@ -352,8 +352,54 @@ const Dashboard: React.FC<DashboardProps> = ({
     exportToCSV('dashboard_overview.csv', headers, rows);
   };
 
+  const BalanceHeroCard = ({
+    title,
+    value,
+    icon: Icon,
+    accentBgClass,
+    accentIconClass,
+    subtitle,
+  }: {
+    title: string;
+    value: number;
+    icon: React.ComponentType<any>;
+    accentBgClass: string;
+    accentIconClass: string;
+    subtitle: string;
+  }) => (
+    <div className={`rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4 ${accentBgClass}`}>
+      <div className="flex items-center gap-3">
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-white/80 ${accentIconClass}`}>
+          <Icon className="w-6 h-6" />
+        </div>
+        <p className="text-base font-semibold text-slate-700">{title}</p>
+      </div>
+      <p className="text-4xl font-bold text-slate-900">₪{value.toLocaleString()}</p>
+      <p className="text-sm text-slate-600">{subtitle}</p>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <BalanceHeroCard
+          title="יתרה נוכחית"
+          value={todaysBalance}
+          icon={Wallet}
+          accentBgClass="bg-blue-50"
+          accentIconClass="text-blue-600"
+          subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
+        />
+        <BalanceHeroCard
+          title="יתרה צפויה"
+          value={monthEndBalance}
+          icon={Scale}
+          accentBgClass="bg-amber-50"
+          accentIconClass="text-amber-600"
+          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
+        />
+      </div>
+
       {/* KPI Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-8 gap-4">
         <KPICard 
