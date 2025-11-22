@@ -2,6 +2,13 @@ import type { Transaction, Category } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_LEGALFLOW_API_URL || '').replace(/\/$/, '');
 
+export class UnauthorizedError extends Error {
+  constructor(message = 'Invalid credentials') {
+    super(message);
+    this.name = 'UnauthorizedError';
+  }
+}
+
 const ensureApiBaseUrl = () => {
   if (!API_BASE_URL) {
     throw new Error('חסר משתנה סביבה VITE_LEGALFLOW_API_URL');
@@ -13,6 +20,10 @@ const ensureApiBaseUrl = () => {
 const parseResponse = async <T>(response: Response): Promise<T> => {
   const text = await response.text();
   const data = text ? (JSON.parse(text) as T & { error?: string }) : ({} as T);
+
+  if (response.status === 401) {
+    throw new UnauthorizedError((data as { error?: string }).error || 'Invalid credentials');
+  }
 
   if (!response.ok) {
     const message = (data as { error?: string }).error || response.statusText || 'שגיאה בשרת';

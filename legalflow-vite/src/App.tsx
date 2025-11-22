@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
 import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Upload, Menu } from 'lucide-react';
 import type { Transaction, TransactionGroup } from './types';
 import {
@@ -23,7 +23,7 @@ import { syncTaxTransactions } from './services/taxService';
 import TransactionForm from './components/TransactionForm';
 import Logo from './components/Logo';
 import Login from './components/Login';
-import { fetchCloudSnapshot, persistCloudSnapshot } from './services/cloudService';
+import { fetchCloudSnapshot, persistCloudSnapshot, UnauthorizedError } from './services/cloudService';
 import { formatDateKey, parseDateKey } from './utils/date';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
@@ -70,6 +70,7 @@ const App: React.FC = () => {
   const [authToken, setAuthToken] = useState<string | null>(() =>
     sessionStorage.getItem('legalflow_token')
   );
+  const [authError, setAuthError] = useState<string | null>(null);
   
   // App State - Lazy initialization ensures we read from storage on first render before any overwrites
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
@@ -96,6 +97,30 @@ const App: React.FC = () => {
   const [importFeedback, setImportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
   const [storageSyncVersion, setStorageSyncVersion] = useState(0);
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [cloudBootstrapVersion, setCloudBootstrapVersion] = useState(0);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+  const [lastSyncIso, setLastSyncIso] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const clearSession = useCallback(() => {
+    setCurrentUser(null);
+    setAuthToken(null);
+    sessionStorage.removeItem('legalflow_user');
+    sessionStorage.removeItem('legalflow_token');
+    sessionStorage.removeItem('legalflow_daily_email_sent');
+    setIsBootstrapping(false);
+    setBootstrapError(null);
+    setSyncStatus('idle');
+    setLastSyncIso(null);
+    setSyncError(null);
+  }, []);
+
+  const requestBootstrapReload = useCallback(() => {
+    setIsBootstrapping(true);
+    setBootstrapError(null);
+    setCloudBootstrapVersion(prev => prev + 1);
+  }, []);
 
   // --- Persistence ---
   useEffect(() => {
@@ -161,14 +186,12 @@ const App: React.FC = () => {
     setAuthToken(token);
     sessionStorage.setItem('legalflow_user', username);
     sessionStorage.setItem('legalflow_token', token);
+    setAuthError(null);
   };
 
   const handleLogout = () => {
-    setCurrentUser(null);
-    setAuthToken(null);
-    sessionStorage.removeItem('legalflow_user');
-    sessionStorage.removeItem('legalflow_token');
-    sessionStorage.removeItem('legalflow_daily_email_sent');
+    clearSession();
+    setAuthError(null);
   };
 
   // Helper to update transactions and sync taxes
@@ -306,15 +329,21 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!currentUser || !authToken) return;
+    if (!currentUser || !authToken) {
+      setIsBootstrapping(false);
+      setBootstrapError(null);
+      return;
+    }
     let cancelled = false;
+    setIsBootstrapping(true);
+    setBootstrapError(null);
 
     (async () => {
+      isRestoringFromCloud.current = true;
       try {
         const snapshot = await fetchCloudSnapshot(authToken);
         if (!snapshot || cancelled) return;
 
-        isRestoringFromCloud.current = true;
         replaceClients(snapshot.clients ?? []);
         replaceCustomCategories(snapshot.customCategories ?? []);
         replaceLoanOverrides(snapshot.loanOverrides ?? {});
@@ -326,22 +355,30 @@ const App: React.FC = () => {
         const sanitizedSnapshot = sanitizeTransactions(snapshot.transactions ?? []);
         const withOverrides = applyLoanOverrides(sanitizedSnapshot);
         setTransactions(syncTaxTransactions(withOverrides));
+        setBootstrapError(null);
       } catch (error) {
-        console.error('Cloud sync fetch failed', error);
+        if (error instanceof UnauthorizedError) {
+          clearSession();
+          setAuthError('החיבור לשרת פג תוקף. התחבר מחדש כדי להמשיך לסנכרן.');
+        } else {
+          console.error('Cloud sync fetch failed', error);
+          setBootstrapError('לא הצלחנו לטעון את הנתונים מהשרת. בדקו את החיבור ונסו שוב.');
+        }
       } finally {
         isRestoringFromCloud.current = false;
+        if (!cancelled) {
+          setIsBootstrapping(false);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [currentUser, authToken]);
+  }, [currentUser, authToken, clearSession, cloudBootstrapVersion]);
 
-  useEffect(() => {
-    if (!currentUser || !authToken || isRestoringFromCloud.current) return;
-
-    const snapshotPayload = {
+  const buildSnapshotPayload = useCallback(() => {
+    return {
       transactions,
       initialBalance,
       clients: getClients(),
@@ -349,11 +386,45 @@ const App: React.FC = () => {
       loanOverrides: getLoanOverrides(),
       updatedAt: new Date().toISOString(),
     };
+  }, [transactions, initialBalance]);
 
-    persistCloudSnapshot(authToken, snapshotPayload).catch(error => {
+  const performCloudSync = useCallback(async () => {
+    if (!currentUser || !authToken || isRestoringFromCloud.current) {
+      return;
+    }
+
+    const payload = buildSnapshotPayload();
+
+    setSyncStatus('syncing');
+    setSyncError(null);
+
+    try {
+      await persistCloudSnapshot(authToken, payload);
+      setSyncStatus('idle');
+      setLastSyncIso(new Date().toISOString());
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        setAuthError('החיבור לשרת פג תוקף. התחבר מחדש כדי להמשיך לסנכרן.');
+        clearSession();
+        return;
+      }
       console.error('Cloud sync persist failed', error);
-    });
-  }, [transactions, initialBalance, currentUser, authToken, storageSyncVersion]);
+      setSyncStatus('error');
+      setSyncError(error instanceof Error ? error.message : 'שגיאה לא ידועה');
+    }
+  }, [authToken, buildSnapshotPayload, clearSession, currentUser]);
+
+  const handleManualSync = useCallback(() => {
+    if (syncStatus === 'syncing') {
+      return;
+    }
+    performCloudSync();
+  }, [performCloudSync, syncStatus]);
+
+  useEffect(() => {
+    if (!currentUser || !authToken || isRestoringFromCloud.current) return;
+    performCloudSync();
+  }, [transactions, initialBalance, currentUser, authToken, storageSyncVersion, performCloudSync]);
 
   useEffect(() => {
     setBalanceDraft(initialBalance.toString());
@@ -471,12 +542,73 @@ const App: React.FC = () => {
     setIsMobileActionsOpen(false);
   };
 
+  const handleMobileSyncClick = () => {
+    handleManualSync();
+    setIsMobileActionsOpen(false);
+  };
+
+  const syncColorClass =
+    syncStatus === 'syncing' ? 'bg-amber-400' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500';
+  const syncLabel =
+    syncStatus === 'syncing' ? 'מסנכרן...' : syncStatus === 'error' ? 'שגיאת סנכרון' : 'מסונכרן';
+  const lastSyncText = lastSyncIso
+    ? `עודכן ${new Date(lastSyncIso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`
+    : 'טרם בוצע סנכרון';
+
   if (!currentUser || !authToken) {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <div className="relative">
+        {authError && (
+          <div className="fixed top-4 left-4 right-4 z-50 rounded-2xl bg-red-600/95 text-white text-center text-sm font-semibold py-3 px-4 shadow-2xl">
+            {authError}
+          </div>
+        )}
+        <Login onLogin={handleLogin} />
+      </div>
+    );
+  }
+
+  if (isBootstrapping) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-slate-50 text-slate-700" dir="rtl">
+        <Logo />
+        <div className="text-center space-y-2">
+          <p className="text-lg font-semibold">טוען נתונים מהשרת...</p>
+          <p className="text-sm text-slate-500">זה לוקח לרוב שניות ספורות.</p>
+        </div>
+        {bootstrapError && (
+          <div className="flex flex-col items-center gap-3">
+            <div className="px-4 py-2 rounded-xl bg-amber-100 text-amber-900 text-sm font-semibold shadow">
+              {bootstrapError}
+            </div>
+            <button
+              onClick={requestBootstrapReload}
+              className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors"
+            >
+              נסה שוב
+            </button>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+      {bootstrapError && !isBootstrapping && (
+        <div className="fixed top-4 left-4 right-4 z-40 md:left-auto md:right-10 md:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-3 bg-amber-100 border border-amber-300 text-amber-900 px-4 py-3 rounded-2xl shadow-lg">
+            <span className="text-sm font-semibold">{bootstrapError}</span>
+            <button
+              onClick={requestBootstrapReload}
+              className="px-3 py-1 text-xs font-bold bg-amber-900 text-white rounded-lg hover:bg-amber-800 transition-colors"
+            >
+              נסה שוב
+            </button>
+          </div>
+        </div>
+      )}
+
       
       {/* Sidebar */}
       <aside className="fixed top-0 right-0 h-full w-64 bg-slate-900 text-white shadow-xl z-20 hidden md:flex flex-col">
@@ -532,6 +664,33 @@ const App: React.FC = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-800 space-y-4">
+          <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className={`w-2.5 h-2.5 rounded-full ${syncColorClass}`}></span>
+                <div className="text-xs">
+                  <div className="font-bold text-white">{syncLabel}</div>
+                  <div className="text-slate-400 text-[11px]">{lastSyncText}</div>
+                </div>
+              </div>
+              <button
+                onClick={handleManualSync}
+                disabled={syncStatus === 'syncing'}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+                  syncStatus === 'syncing'
+                    ? 'border-slate-600 text-slate-500 cursor-not-allowed'
+                    : 'border-slate-500 text-white hover:bg-slate-700'
+                }`}
+              >
+                סנכרון עכשיו
+              </button>
+            </div>
+            {syncError && (
+              <div className="text-[11px] text-red-200 bg-red-500/10 border border-red-400/30 px-3 py-1.5 rounded-lg">
+                {syncError}
+              </div>
+            )}
+          </div>
           <button
             onClick={handleImportButtonClick}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
@@ -714,6 +873,17 @@ const App: React.FC = () => {
               </button>
             </div>
             <div className="space-y-3">
+              <button
+                onClick={handleMobileSyncClick}
+                disabled={syncStatus === 'syncing'}
+                className={`w-full px-4 py-3 rounded-xl border text-sm font-semibold transition-colors ${
+                  syncStatus === 'syncing'
+                    ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {syncStatus === 'syncing' ? 'מסנכרן...' : 'סנכרון עכשיו'}
+              </button>
               <button
                 onClick={handleMobileImportClick}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
