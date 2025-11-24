@@ -36,16 +36,14 @@ import Logo from './components/Logo';
 import Login from './components/Login';
 import { fetchCloudSnapshot, persistCloudSnapshot, UnauthorizedError } from './services/cloudService';
 import { formatDateKey, parseDateKey } from './utils/date';
-import { calculateOverdueDays } from './utils/collectionStatus';
-import type { OverdueAlertEntry } from './components/OverdueAlertsPanel';
 import SystemToolsToolbar from './components/SystemToolsToolbar';
 import ClientInsightPanel from './components/ClientInsightPanel';
 import type { ClientInsightTarget } from './components/ClientInsightPanel';
 import { calculateForecast } from './services/forecastService';
 import { buildDailyWhatsappSummary } from './services/cfoAssistantService';
 import DailyWhatsappSummaryModal from './components/DailyWhatsappSummaryModal';
-import AdvancedAlertsPanel from './components/AdvancedAlertsPanel';
-import { buildAdvancedAlerts } from './services/alertService';
+import UnifiedAlertsPanel from './components/UnifiedAlertsPanel';
+import { buildUnifiedAlerts, type AlertTarget } from './services/alertEngine';
 import HelpCenterModal from './components/HelpCenterModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
@@ -145,6 +143,7 @@ const App: React.FC = () => {
   const [accessItems, setAccessItems] = useState<AccessCollectionItem[]>(() => getAccessCollectionItems());
   const [tasks, setTasks] = useState<TaskItem[]>(() => getTasks());
   const [highlightedCollection, setHighlightedCollection] = useState<{ type: 'lloyds' | 'generic' | 'access'; id: string } | null>(null);
+  const [flowHighlightTarget, setFlowHighlightTarget] = useState<{ date: string; transactionIds?: string[] } | null>(null);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isBackupReminderOpen, setIsBackupReminderOpen] = useState(false);
   const [backupReminderWarning, setBackupReminderWarning] = useState<string | null>(null);
@@ -784,44 +783,39 @@ const App: React.FC = () => {
   }, []);
 
   const handleAlertNavigate = useCallback(
-    (entry: OverdueAlertEntry) => {
+    (target?: AlertTarget) => {
       setIsAlertsOpen(false);
-      if (entry.tracker === 'lloyds') {
-        setActiveTab('collectionLloyds');
-        setHighlightedCollection({ type: 'lloyds', id: entry.id });
-      } else if (entry.tracker === 'generic') {
-        setActiveTab('collectionGeneric');
-        setHighlightedCollection({ type: 'generic', id: entry.id });
-      } else {
-        setActiveTab('collectionAccess');
-        setHighlightedCollection({ type: 'access', id: entry.id });
+      if (!target) {
+        return;
+      }
+      if (target.type === 'collection') {
+        if (target.tracker === 'lloyds') {
+          setActiveTab('collectionLloyds');
+        } else if (target.tracker === 'generic') {
+          setActiveTab('collectionGeneric');
+        } else {
+          setActiveTab('collectionAccess');
+        }
+        setHighlightedCollection({ type: target.tracker, id: target.itemId });
+        return;
+      }
+      if (target.type === 'flow') {
+        setActiveTab('flow');
+        setFlowHighlightTarget({ date: target.date, transactionIds: target.transactionIds });
+        return;
+      }
+      if (target.type === 'dashboard') {
+        setActiveTab('dashboard');
       }
     },
     []
   );
-  const handleCollectionAlertNavigate = useCallback(
-    (source: 'lloyds' | 'generic' | 'access', itemId: string) => {
-      setIsAlertsOpen(false);
-      if (source === 'lloyds') {
-        setActiveTab('collectionLloyds');
-        setHighlightedCollection({ type: 'lloyds', id: itemId });
-      } else if (source === 'generic') {
-        setActiveTab('collectionGeneric');
-        setHighlightedCollection({ type: 'generic', id: itemId });
-      } else {
-        setActiveTab('collectionAccess');
-        setHighlightedCollection({ type: 'access', id: itemId });
-      }
-    },
-    []
-  );
-  const handleCashflowAlertNavigate = useCallback(() => {
-    setIsAlertsOpen(false);
-    setActiveTab('dashboard');
-  }, []);
 
   const clearHighlight = useCallback(() => {
     setHighlightedCollection(null);
+  }, []);
+  const clearFlowHighlight = useCallback(() => {
+    setFlowHighlightTarget(null);
   }, []);
 
   const syncColorClass =
@@ -831,56 +825,11 @@ const App: React.FC = () => {
   const lastSyncText = lastSyncIso
     ? `עודכן ${new Date(lastSyncIso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`
     : 'טרם בוצע סנכרון';
-  const overdueEntries = useMemo<OverdueAlertEntry[]>(() => {
-    const entries: OverdueAlertEntry[] = [];
-    lloydsItems.forEach(item => {
-      const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
-      if (overdueDays !== null) {
-        entries.push({
-          id: item.id,
-          tracker: 'lloyds',
-          accountNumber: item.accountNumber,
-          name: item.claimantName || item.insuredName || 'ללא שם',
-          demandDate: item.demandDate,
-          amount: item.amount,
-          overdueDays,
-        });
-      }
-    });
-    genericItems.forEach(item => {
-      const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
-      if (overdueDays !== null) {
-        entries.push({
-          id: item.id,
-          tracker: 'generic',
-          accountNumber: item.accountNumber,
-          name: item.clientName || item.caseName || 'ללא שם',
-          demandDate: item.demandDate,
-          amount: item.amount,
-          overdueDays,
-        });
-      }
-    });
-    accessItems.forEach(item => {
-      const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
-      if (overdueDays !== null) {
-        entries.push({
-          id: item.id,
-          tracker: 'access',
-          accountNumber: item.accountNumber,
-          name: item.insuredName || item.caseName || 'ללא שם',
-          demandDate: item.demandDate,
-          amount: item.amount,
-          overdueDays,
-        });
-      }
-    });
-    return entries.sort((a, b) => b.overdueDays - a.overdueDays);
-  }, [lloydsItems, genericItems, accessItems]);
-  const { collectionAlerts, cashflowAlerts } = useMemo(
-    () => buildAdvancedAlerts(transactions, lloydsItems, genericItems, accessItems),
+  const alertBundle = useMemo(
+    () => buildUnifiedAlerts(transactions, lloydsItems, genericItems, accessItems),
     [transactions, lloydsItems, genericItems, accessItems]
   );
+  const alertsCount = alertBundle.counts.total;
   const lloydsHighlightId = highlightedCollection?.type === 'lloyds' ? highlightedCollection.id : null;
   const genericHighlightId = highlightedCollection?.type === 'generic' ? highlightedCollection.id : null;
   const accessHighlightId = highlightedCollection?.type === 'access' ? highlightedCollection.id : null;
@@ -1164,13 +1113,15 @@ const App: React.FC = () => {
               initialBalance={initialBalance}
               onDeleteTransaction={handleDeleteTransaction}
               openTransactionForm={openTransactionForm}
-            onEditTransaction={handleEditTransactionRequest}
+              onEditTransaction={handleEditTransactionRequest}
               onToggleStatus={handleToggleTransactionStatus}
               onUpdateTaxAmount={handleUpdateTaxAmount}
               onUpdateLoanAmount={handleUpdateLoanAmount}
               forecastResult={forecastResult}
               recentTransactionIds={recentTransactionIds}
               deletingTransactionId={pendingDeletionId}
+              highlightedDate={flowHighlightTarget?.date ?? null}
+              onClearHighlight={flowHighlightTarget ? clearFlowHighlight : undefined}
               systemToolsToolbar={
                 <SystemToolsToolbar
                   syncStatus={syncStatus}
@@ -1179,7 +1130,7 @@ const App: React.FC = () => {
                   lastSyncText={lastSyncText}
                   syncError={syncError}
                   importFeedback={importFeedback}
-                  alertsCount={overdueEntries.length}
+                  alertsCount={alertsCount}
                   onManualSync={handleManualSync}
                   onImport={handleImportButtonClick}
                   onExport={handleExportBackup}
@@ -1345,9 +1296,9 @@ const App: React.FC = () => {
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between"
               >
                 <span>התראות</span>
-                {overdueEntries.length > 0 && (
+                {alertsCount > 0 && (
                   <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
-                    {overdueEntries.length}
+                    {alertsCount}
                   </span>
                 )}
               </button>
@@ -1477,15 +1428,11 @@ const App: React.FC = () => {
         onChange={handleBackupFileChange}
       />
 
-      <AdvancedAlertsPanel
+      <UnifiedAlertsPanel
         isOpen={isAlertsOpen}
         onClose={() => setIsAlertsOpen(false)}
-        overdueEntries={overdueEntries}
-        collectionAlerts={collectionAlerts}
-        cashflowAlerts={cashflowAlerts}
-        onNavigateToCollection={handleCollectionAlertNavigate}
-        onNavigateToOverdue={handleAlertNavigate}
-        onNavigateToDashboard={handleCashflowAlertNavigate}
+        alerts={alertBundle.alerts}
+        onNavigate={handleAlertNavigate}
       />
 
       <ClientInsightPanel

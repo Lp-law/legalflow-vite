@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, ChevronLeft, Plus, Download, ChevronDown } from 'lucide-react';
@@ -23,6 +23,8 @@ interface MonthlyFlowProps {
   systemToolsToolbar?: ReactNode;
   recentTransactionIds?: string[];
   deletingTransactionId?: string | null;
+  highlightedDate?: string | null;
+  onClearHighlight?: () => void;
 }
 
 type MonthSummary = {
@@ -78,9 +80,9 @@ const GROUP_LABELS: Record<TransactionGroup, string> = {
 
 const EMPTY_CATEGORY_LABEL = 'ללא קטגוריה';
 
-const MonthlyFlow: React.FC<MonthlyFlowProps> = ({ 
-  transactions, 
-  initialBalance, 
+const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
+  transactions,
+  initialBalance,
   onDeleteTransaction,
   openTransactionForm,
   onEditTransaction,
@@ -90,7 +92,9 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   forecastResult,
   recentTransactionIds,
   deletingTransactionId,
-  systemToolsToolbar
+  systemToolsToolbar,
+  highlightedDate,
+  onClearHighlight,
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   
@@ -126,6 +130,22 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
       {} as Record<TransactionGroup, boolean>
     )
   );
+  useEffect(() => {
+    if (!highlightedDate || typeof document === 'undefined') {
+      return;
+    }
+    const row = document.getElementById(`flow-row-${highlightedDate}`);
+    row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!onClearHighlight || typeof window === 'undefined') {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      onClearHighlight();
+    }, 2600);
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [highlightedDate, onClearHighlight]);
 
   // --- Date Logic ---
   const monthStartDate = useMemo(
@@ -821,16 +841,24 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                              const isDeletingRow =
                                 deletingTransactionId &&
                                 dayTransactions.some(transaction => transaction.id === deletingTransactionId);
+                             const isHighlightedRow = highlightedDate === day.dateStr;
                              const rowClass = `${
                                 isToday
                                   ? 'bg-blue-100 relative z-10 ring-2 ring-blue-600 ring-inset shadow-md hover:bg-blue-100'
                                   : 'hover:bg-[#eef5ff] transition-colors'
                               } ${hasNewTransaction ? 'highlight-flash' : ''} ${
                                 isDeletingRow ? 'fade-out-soft' : ''
+                              } ${
+                                isHighlightedRow ? 'ring-2 ring-amber-400 shadow-xl bg-amber-50/90' : ''
                               }`;
 
                              return (
-                            <tr key={day.dateStr} className={rowClass} style={rowBg ? { backgroundColor: rowBg } : undefined}>
+                           <tr
+                              id={`flow-row-${day.dateStr}`}
+                              key={day.dateStr}
+                              className={rowClass}
+                              style={rowBg ? { backgroundColor: rowBg } : undefined}
+                            >
                                 <td className="px-2 py-2 border-l border-slate-100 text-xs text-slate-400 font-medium hidden md:table-cell">
                                     {index + 1}
                                 </td>
