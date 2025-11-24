@@ -1027,7 +1027,13 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'summary' && (
-              <ExecutiveSummary transactions={transactions} initialBalance={initialBalance} />
+            <ExecutiveSummary
+              transactions={transactions}
+              initialBalance={initialBalance}
+              lloydsItems={lloydsItems}
+              genericItems={genericItems}
+              accessItems={accessItems}
+            />
           )}
         </Suspense>
       </main>

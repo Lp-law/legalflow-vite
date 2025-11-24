@@ -1,18 +1,34 @@
 import React, { useState } from 'react';
-import type { Transaction } from '../types';
+import type {
+  Transaction,
+  LloydsCollectionItem,
+  GenericCollectionItem,
+  AccessCollectionItem,
+} from '../types';
 import { generateExecutiveSummary } from '../services/reportService';
 import { exportToCSV } from '../services/exportService';
-import { FileText, Copy, Check, Sparkles, Download } from 'lucide-react';
+import { FileText, Copy, Check, Sparkles, Download, PieChart } from 'lucide-react';
+import ExecutiveSegmentsPanel from './ExecutiveSegmentsPanel';
 
 interface ExecutiveSummaryProps {
   transactions: Transaction[];
   initialBalance: number;
+  lloydsItems: LloydsCollectionItem[];
+  genericItems: GenericCollectionItem[];
+  accessItems: AccessCollectionItem[];
 }
 
-const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({ transactions, initialBalance }) => {
+const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
+  transactions,
+  initialBalance,
+  lloydsItems,
+  genericItems,
+  accessItems,
+}) => {
   const [reportText, setReportText] = useState<string>('');
   const [currentPeriod, setCurrentPeriod] = useState<'month' | 'quarter' | 'year' | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showSegments, setShowSegments] = useState(false);
 
   const handleGenerate = (period: 'month' | 'quarter' | 'year') => {
     setCurrentPeriod(period);
@@ -49,7 +65,7 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({ transactions, initi
         <p className="text-slate-500">בחר את טווח הזמן הרצוי לקבלת דוח מילולי מקיף על מצב המשרד</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <button 
           onClick={() => handleGenerate('month')}
           className={`relative overflow-hidden p-8 rounded-2xl border-2 transition-all group ${currentPeriod === 'month' ? 'border-blue-600 bg-blue-50 shadow-lg' : 'border-slate-200 bg-white hover:border-blue-400 hover:shadow-md'}`}
@@ -79,7 +95,28 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({ transactions, initi
           <span className="block text-xl font-bold text-slate-800 mb-2">סיכום שנתי</span>
           <span className="text-sm text-slate-500">כתוב לי סיכום מנהלים שנתי</span>
         </button>
+
+        <button
+          onClick={() => setShowSegments(true)}
+          className="relative overflow-hidden p-8 rounded-2xl border-2 transition-all group border-slate-200 bg-white hover:border-blue-400 hover:shadow-md"
+        >
+          <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+          <PieChart className="w-10 h-10 mb-4 text-slate-400 group-hover:text-blue-500" />
+          <span className="block text-xl font-bold text-slate-800 mb-2">פילוחים</span>
+          <span className="text-sm text-slate-500">
+            בדיקת מצב מעקבי הגבייה לפי טווחי זמן וחובות פתוחים
+          </span>
+        </button>
       </div>
+
+      {showSegments && (
+        <ExecutiveSegmentsPanel
+          lloyds={lloydsItems}
+          generic={genericItems}
+          access={accessItems}
+          onClose={() => setShowSegments(false)}
+        />
+      )}
 
       {reportText && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden animate-fade-in-up">
