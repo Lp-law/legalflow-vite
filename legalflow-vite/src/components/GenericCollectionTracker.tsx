@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { CollectionCategory, GenericCollectionItem } from '../types';
 import { calculateOverdueDays, formatOverdueLabel } from '../utils/collectionStatus';
 import ClientSelector from './ClientSelector';
+import { AlertTriangle } from 'lucide-react';
+import type { ClientInsightTarget } from './ClientInsightPanel';
 
 const CATEGORY_LABELS: Record<CollectionCategory, string> = {
   expenses: 'הוצאות',
@@ -31,6 +33,7 @@ interface GenericCollectionTrackerProps {
   onChange: (items: GenericCollectionItem[]) => void;
   highlightedId?: string | null;
   onClearHighlight?: () => void;
+  onClientInsightRequest?: (target: ClientInsightTarget) => void;
 }
 
 const GenericCollectionTracker: React.FC<GenericCollectionTrackerProps> = ({
@@ -38,6 +41,7 @@ const GenericCollectionTracker: React.FC<GenericCollectionTrackerProps> = ({
   onChange,
   highlightedId,
   onClearHighlight,
+  onClientInsightRequest,
 }) => {
   const [form, setForm] = useState<FormState>(initialFormState);
   const [formError, setFormError] = useState('');
@@ -287,13 +291,35 @@ const GenericCollectionTracker: React.FC<GenericCollectionTrackerProps> = ({
               const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
               const overdueLabel = formatOverdueLabel(overdueDays);
               const zebraClass = index % 2 === 0 ? 'bg-white' : 'bg-[#f8f8f8]';
-              const baseClass = overdueDays !== null ? 'bg-red-50 text-red-800 hover:bg-red-100' : `${zebraClass}`;
-              const rowClasses = `${baseClass} hover:bg-[#eef5ff] transition-colors`;
+              let rowClasses = `${zebraClass} hover:bg-[#eef5ff] transition-colors`;
+              if (overdueDays !== null) {
+                rowClasses =
+                  overdueDays >= 90
+                    ? 'bg-red-200 text-red-900 hover:bg-red-300 transition-colors'
+                    : 'bg-red-50 text-red-800 hover:bg-red-100 transition-colors';
+              }
               return (
                 <tr key={item.id} id={`generic-row-${item.id}`} className={rowClasses}>
                   <td className="px-3 py-3 text-xs text-slate-500 font-semibold hidden md:table-cell">{index + 1}</td>
                   <td className="px-4 py-3 font-semibold">{item.accountNumber}</td>
-                  <td className="px-4 py-3">{item.clientName || '-'}</td>
+                  <td className="px-4 py-3">
+                    {item.clientName ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onClientInsightRequest?.({
+                            name: item.clientName,
+                            source: 'generic',
+                          })
+                        }
+                        className="text-blue-600 hover:underline font-semibold"
+                      >
+                        {item.clientName}
+                      </button>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
                   <td className="px-4 py-3">{item.caseName || '-'}</td>
                   <td className="px-4 py-3">{formatDate(item.demandDate)}</td>
                   <td className="px-4 py-3">
@@ -315,7 +341,12 @@ const GenericCollectionTracker: React.FC<GenericCollectionTrackerProps> = ({
                         {item.isPaid ? 'שולם' : 'ממתין'}
                       </button>
                       {overdueLabel && (
-                        <span className="text-xs font-bold text-red-600">{overdueLabel}</span>
+                        <span className="text-xs font-bold text-red-600 flex items-center gap-1">
+                          {overdueDays !== null && overdueDays >= 90 && (
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                          )}
+                          {overdueLabel}
+                        </span>
                       )}
                     </div>
                   </td>

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { CollectionCategory, LloydsCollectionItem } from '../types';
 import { calculateOverdueDays, formatOverdueLabel } from '../utils/collectionStatus';
 import SyndicateSelector from './SyndicateSelector';
+import { AlertTriangle } from 'lucide-react';
+import type { ClientInsightTarget } from './ClientInsightPanel';
 
 const CATEGORY_LABELS: Record<CollectionCategory, string> = {
   expenses: 'הוצאות',
@@ -33,6 +35,7 @@ interface LloydsCollectionTrackerProps {
   onChange: (items: LloydsCollectionItem[]) => void;
   highlightedId?: string | null;
   onClearHighlight?: () => void;
+  onClientInsightRequest?: (target: ClientInsightTarget) => void;
 }
 
 const LloydsCollectionTracker: React.FC<LloydsCollectionTrackerProps> = ({
@@ -40,6 +43,7 @@ const LloydsCollectionTracker: React.FC<LloydsCollectionTrackerProps> = ({
   onChange,
   highlightedId,
   onClearHighlight,
+  onClientInsightRequest,
 }) => {
   const [form, setForm] = useState<FormState>(initialFormState);
   const [formError, setFormError] = useState<string>('');
@@ -308,13 +312,35 @@ const LloydsCollectionTracker: React.FC<LloydsCollectionTrackerProps> = ({
               const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
               const overdueLabel = formatOverdueLabel(overdueDays);
               const zebraClass = index % 2 === 0 ? 'bg-white' : 'bg-[#f8f8f8]';
-              const baseClass = overdueDays !== null ? 'bg-red-50 text-red-800 hover:bg-red-100' : `${zebraClass}`;
-              const rowClasses = `${baseClass} hover:bg-[#eef5ff] transition-colors`;
+              let rowClasses = `${zebraClass} hover:bg-[#eef5ff] transition-colors`;
+              if (overdueDays !== null) {
+                rowClasses =
+                  overdueDays >= 90
+                    ? 'bg-red-200 text-red-900 hover:bg-red-300 transition-colors'
+                    : 'bg-red-50 text-red-800 hover:bg-red-100 transition-colors';
+              }
               return (
                 <tr key={item.id} id={`lloyds-row-${item.id}`} className={rowClasses}>
                   <td className="px-3 py-3 text-xs text-slate-500 font-semibold hidden md:table-cell">{index + 1}</td>
                   <td className="px-4 py-3 font-semibold">{item.accountNumber}</td>
-                  <td className="px-4 py-3">{item.claimantName || '-'}</td>
+                  <td className="px-4 py-3">
+                    {item.claimantName ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onClientInsightRequest?.({
+                            name: item.claimantName,
+                            source: 'lloyds',
+                          })
+                        }
+                        className="text-blue-600 hover:underline font-semibold"
+                      >
+                        {item.claimantName}
+                      </button>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
                   <td className="px-4 py-3">{item.insuredName || '-'}</td>
                   <td className="px-4 py-3">{item.syndicate || '-'}</td>
                   <td className="px-4 py-3">{formatDate(item.demandDate)}</td>
@@ -337,7 +363,12 @@ const LloydsCollectionTracker: React.FC<LloydsCollectionTrackerProps> = ({
                         {item.isPaid ? 'שולם' : 'ממתין'}
                       </button>
                       {overdueLabel && (
-                        <span className="text-xs font-bold text-red-600">{overdueLabel}</span>
+                        <span className="text-xs font-bold text-red-600 flex items-center gap-1">
+                          {overdueDays !== null && overdueDays >= 90 && (
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                          )}
+                          {overdueLabel}
+                        </span>
                       )}
                     </div>
                   </td>

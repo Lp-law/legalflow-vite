@@ -38,6 +38,8 @@ import { calculateOverdueDays } from './utils/collectionStatus';
 import OverdueAlertsPanel from './components/OverdueAlertsPanel';
 import type { OverdueAlertEntry } from './components/OverdueAlertsPanel';
 import SystemToolsToolbar from './components/SystemToolsToolbar';
+import ClientInsightPanel from './components/ClientInsightPanel';
+import type { ClientInsightTarget } from './components/ClientInsightPanel';
 import { calculateForecast } from './services/forecastService';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
@@ -138,6 +140,11 @@ const App: React.FC = () => {
     return sessionStorage.getItem(BACKUP_SESSION_KEY) === '1';
   });
   const [logoutWarning, setLogoutWarning] = useState<string | null>(null);
+  const [clientInsightTarget, setClientInsightTarget] = useState<ClientInsightTarget | null>(null);
+  const handleOpenClientInsight = useCallback((target: ClientInsightTarget) => {
+    setClientInsightTarget(target);
+  }, []);
+
   const clearSession = useCallback(() => {
     setCurrentUser(null);
     setAuthToken(null);
@@ -1089,6 +1096,7 @@ const App: React.FC = () => {
               onChange={persistLloydsItems}
               highlightedId={lloydsHighlightId}
               onClearHighlight={lloydsHighlightId ? clearHighlight : undefined}
+              onClientInsightRequest={handleOpenClientInsight}
             />
           )}
 
@@ -1098,6 +1106,7 @@ const App: React.FC = () => {
               onChange={persistGenericItems}
               highlightedId={genericHighlightId}
               onClearHighlight={genericHighlightId ? clearHighlight : undefined}
+              onClientInsightRequest={handleOpenClientInsight}
             />
           )}
 
@@ -1107,6 +1116,7 @@ const App: React.FC = () => {
               onChange={persistAccessItems}
               highlightedId={accessHighlightId}
               onClearHighlight={accessHighlightId ? clearHighlight : undefined}
+              onClientInsightRequest={handleOpenClientInsight}
             />
           )}
 
@@ -1338,6 +1348,16 @@ const App: React.FC = () => {
         onClose={() => setIsAlertsOpen(false)}
         entries={overdueEntries}
         onNavigate={handleAlertNavigate}
+      />
+
+      <ClientInsightPanel
+        isOpen={Boolean(clientInsightTarget)}
+        target={clientInsightTarget}
+        onClose={() => setClientInsightTarget(null)}
+        transactions={transactions}
+        lloydsItems={lloydsItems}
+        genericItems={genericItems}
+        accessItems={accessItems}
       />
 
     </div>
