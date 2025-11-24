@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, ChevronLeft, Plus, Download } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
@@ -17,6 +18,7 @@ interface MonthlyFlowProps {
   onToggleStatus: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount: (id: string, amount: number) => void;
   onUpdateLoanAmount: (id: string, amount: number) => void;
+  systemToolsToolbar?: ReactNode;
 }
 
 type MonthSummary = {
@@ -58,7 +60,8 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   onEditTransaction,
   onToggleStatus,
   onUpdateTaxAmount,
-  onUpdateLoanAmount
+  onUpdateLoanAmount,
+  systemToolsToolbar
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   
@@ -569,6 +572,12 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
               gradientClass="bg-gradient-to-br from-emerald-600 to-lime-500"
             />
         </div>
+
+        {systemToolsToolbar && (
+          <div className="hidden md:block mt-4">
+            {systemToolsToolbar}
+          </div>
+        )}
       </div>
 
       {/* Main Grid */}

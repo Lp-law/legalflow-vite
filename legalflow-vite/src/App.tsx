@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, Bell } from 'lucide-react';
+import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu } from 'lucide-react';
 import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem } from './types';
 import {
   getTransactions,
@@ -37,6 +37,7 @@ import { formatDateKey, parseDateKey } from './utils/date';
 import { calculateOverdueDays } from './utils/collectionStatus';
 import OverdueAlertsPanel from './components/OverdueAlertsPanel';
 import type { OverdueAlertEntry } from './components/OverdueAlertsPanel';
+import SystemToolsToolbar from './components/SystemToolsToolbar';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -661,6 +662,18 @@ const App: React.FC = () => {
     setIsMobileActionsOpen(false);
   };
 
+  const handleExportBackup = useCallback(() => {
+    exportBackupJSON(transactions);
+  }, [transactions]);
+
+  const handleOpenBalanceModal = useCallback(() => {
+    setIsBalanceModalOpen(true);
+  }, []);
+
+  const handleShowAlerts = useCallback(() => {
+    setIsAlertsOpen(true);
+  }, []);
+
   const handleAlertNavigate = useCallback(
     (entry: OverdueAlertEntry) => {
       setIsAlertsOpen(false);
@@ -874,78 +887,7 @@ const App: React.FC = () => {
           </button>
         </nav>
 
-        <div className="p-4 border-t border-slate-800 space-y-3 text-right">
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-slate-400 flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${syncColorClass}`}></span>
-                <span className="font-semibold text-slate-100">{syncLabel}</span>
-              </span>
-              <button
-                onClick={handleManualSync}
-                disabled={syncStatus === 'syncing'}
-                className={`text-[11px] font-semibold ${
-                  syncStatus === 'syncing'
-                    ? 'text-slate-600 cursor-not-allowed'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                סנכרון עכשיו
-              </button>
-            </div>
-            <div className="text-[11px] text-slate-500">{lastSyncText}</div>
-            {syncError && (
-              <div className="text-[11px] text-red-200">{syncError}</div>
-            )}
-          </div>
-          <div>
-            <div className="text-xs text-slate-500 mb-1">תחזוקת מערכת</div>
-            <div className="space-y-1">
-              <button
-                onClick={handleImportButtonClick}
-                className="w-full text-right text-sm py-1 px-2 rounded hover:bg-slate-700 transition"
-              >
-                ייבוא גיבוי
-              </button>
-              <button
-                onClick={() => exportBackupJSON(transactions)}
-                className="w-full text-right text-sm py-1 px-2 rounded hover:bg-slate-700 transition"
-              >
-                ייצוא גיבוי
-              </button>
-              <button
-                onClick={() => setIsBalanceModalOpen(true)}
-                className="w-full text-right text-sm py-1 px-2 rounded hover:bg-slate-700 transition"
-              >
-                עדכון יתרת פתיחה
-              </button>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsAlertsOpen(true)}
-            className="w-full flex items-center justify-between gap-2 px-2 py-1 text-sm rounded hover:bg-slate-700 transition"
-          >
-            <span className="flex items-center gap-2">
-              <Bell className="w-4 h-4" />
-              התראות
-            </span>
-            {overdueEntries.length > 0 && (
-              <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
-                {overdueEntries.length}
-              </span>
-            )}
-          </button>
-          {importFeedback && (
-            <div
-              className={`hidden md:block text-xs px-2 py-1 rounded border ${
-                importFeedback.type === 'success'
-                  ? 'border-emerald-300 text-emerald-200'
-                  : 'border-red-300 text-red-200'
-              }`}
-            >
-              {importFeedback.message}
-            </div>
-          )}
+        <div className="p-4 border-t border-slate-800">
           <button 
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/50 rounded-lg transition-colors text-sm"
@@ -1024,6 +966,22 @@ const App: React.FC = () => {
               onToggleStatus={handleToggleTransactionStatus}
               onUpdateTaxAmount={handleUpdateTaxAmount}
               onUpdateLoanAmount={handleUpdateLoanAmount}
+              systemToolsToolbar={
+                <SystemToolsToolbar
+                  syncStatus={syncStatus}
+                  syncLabel={syncLabel}
+                  syncColorClass={syncColorClass}
+                  lastSyncText={lastSyncText}
+                  syncError={syncError}
+                  importFeedback={importFeedback}
+                  alertsCount={overdueEntries.length}
+                  onManualSync={handleManualSync}
+                  onImport={handleImportButtonClick}
+                  onExport={handleExportBackup}
+                  onOpenBalance={handleOpenBalanceModal}
+                  onShowAlerts={handleShowAlerts}
+                />
+              }
             />
           )}
 
