@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { CollectionCategory, GenericCollectionItem } from '../types';
 import { calculateOverdueDays, formatOverdueLabel } from '../utils/collectionStatus';
+import ClientSelector from './ClientSelector';
 
 const CATEGORY_LABELS: Record<CollectionCategory, string> = {
   expenses: 'הוצאות',
@@ -198,11 +199,9 @@ const GenericCollectionTracker: React.FC<GenericCollectionTrackerProps> = ({
           </label>
           <label className="text-sm font-medium text-slate-700">
             שם הלקוח
-            <input
-              type="text"
+            <ClientSelector
               value={form.clientName}
-              onChange={e => setForm(current => ({ ...current, clientName: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              onChange={next => setForm(current => ({ ...current, clientName: next }))}
             />
           </label>
           <label className="text-sm font-medium text-slate-700">
@@ -365,13 +364,9 @@ const GenericCollectionTracker: React.FC<GenericCollectionTrackerProps> = ({
               </label>
               <label className="text-sm font-medium text-slate-700">
                 שם הלקוח
-                <input
-                  type="text"
+                <ClientSelector
                   value={editForm.clientName}
-                  onChange={e =>
-                    setEditForm(current => ({ ...current, clientName: e.target.value }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  onChange={next => setEditForm(current => ({ ...current, clientName: next }))}
                 />
               </label>
               <label className="text-sm font-medium text-slate-700">

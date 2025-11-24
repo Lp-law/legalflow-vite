@@ -9,7 +9,80 @@ const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
 const STORAGE_KEY_LLOYDS_COLLECTION = 'legalflow_lloyds_collection_v1';
 const STORAGE_KEY_GENERIC_COLLECTION = 'legalflow_generic_collection_v1';
 const STORAGE_KEY_ACCESS_COLLECTION = 'legalflow_access_collection_v1';
+const STORAGE_KEY_LLOYDS_SYNDICATES = 'legalflow_lloyds_syndicates_v1';
 export const STORAGE_EVENT = 'legalflow:storage-changed';
+const DEFAULT_LLOYDS_SYNDICATES = ['WRB', 'QBE', 'DALE'];
+const normalizeSyndicateName = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : '';
+
+const buildSyndicateList = (input: unknown): string[] => {
+  const seen = new Set<string>();
+  const sanitized: string[] = [];
+  const append = (name: unknown) => {
+    const normalized = normalizeSyndicateName(name);
+    if (!normalized || seen.has(normalized)) return;
+    sanitized.push(normalized);
+    seen.add(normalized);
+  };
+  DEFAULT_LLOYDS_SYNDICATES.forEach(append);
+  if (Array.isArray(input)) {
+    input.forEach(append);
+  }
+  return sanitized;
+};
+
+const writeSyndicatesIfChanged = (original: unknown, sanitized: string[]) => {
+  const originalList = Array.isArray(original) ? buildSyndicateList(original) : buildSyndicateList([]);
+  if (
+    originalList.length !== sanitized.length ||
+    originalList.some((value, index) => value !== sanitized[index])
+  ) {
+    localStorage.setItem(STORAGE_KEY_LLOYDS_SYNDICATES, JSON.stringify(sanitized));
+  }
+};
+
+export const getLloydsSyndicates = (): string[] => {
+  const stored = localStorage.getItem(STORAGE_KEY_LLOYDS_SYNDICATES);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      const sanitized = buildSyndicateList(parsed);
+      writeSyndicatesIfChanged(parsed, sanitized);
+      return sanitized;
+    } catch {
+      // fall back to defaults
+    }
+  }
+  const defaults = buildSyndicateList([]);
+  localStorage.setItem(STORAGE_KEY_LLOYDS_SYNDICATES, JSON.stringify(defaults));
+  return defaults;
+};
+
+export const saveLloydsSyndicates = (list: string[]): string[] => {
+  const sanitized = buildSyndicateList(list);
+  localStorage.setItem(STORAGE_KEY_LLOYDS_SYNDICATES, JSON.stringify(sanitized));
+  emitStorageChange('lloydsSyndicates');
+  return sanitized;
+};
+
+const mergeLloydsSyndicates = (candidates: string[]) => {
+  if (!Array.isArray(candidates) || !candidates.length) {
+    return;
+  }
+  const current = getLloydsSyndicates();
+  const next = [...current];
+  let changed = false;
+  candidates.forEach(candidate => {
+    const normalized = normalizeSyndicateName(candidate);
+    if (normalized && !next.includes(normalized)) {
+      next.push(normalized);
+      changed = true;
+    }
+  });
+  if (changed) {
+    saveLloydsSyndicates(next);
+  }
+};
 
 const emitStorageChange = (key: string) => {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
@@ -460,10 +533,17 @@ export const replaceClients = (nextClients: unknown) => {
 
 // --- Collection Trackers ---
 
-export const getLloydsCollectionItems = (): LloydsCollectionItem[] =>
-  readCollectionItems<LloydsCollectionItem>(STORAGE_KEY_LLOYDS_COLLECTION, sanitizeLloydsItem);
+export const getLloydsCollectionItems = (): LloydsCollectionItem[] => {
+  const items = readCollectionItems<LloydsCollectionItem>(
+    STORAGE_KEY_LLOYDS_COLLECTION,
+    sanitizeLloydsItem
+  );
+  mergeLloydsSyndicates(items.map(item => item.syndicate).filter(Boolean));
+  return items;
+};
 
 export const saveLloydsCollectionItems = (items: LloydsCollectionItem[]) => {
+  mergeLloydsSyndicates(items.map(item => item.syndicate).filter(Boolean));
   persistCollectionItems(STORAGE_KEY_LLOYDS_COLLECTION, items, 'lloydsCollection');
 };
 
@@ -473,6 +553,7 @@ export const replaceLloydsCollectionItems = (nextItems: unknown): LloydsCollecti
     .map(item => sanitizeLloydsItem(item))
     .filter((item): item is LloydsCollectionItem => Boolean(item));
   persistCollectionItems(STORAGE_KEY_LLOYDS_COLLECTION, sanitized, 'lloydsCollection');
+  mergeLloydsSyndicates(sanitized.map(item => item.syndicate).filter(Boolean));
   return sanitized;
 };
 

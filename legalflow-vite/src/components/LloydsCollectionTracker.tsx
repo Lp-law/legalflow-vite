@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { CollectionCategory, LloydsCollectionItem } from '../types';
 import { calculateOverdueDays, formatOverdueLabel } from '../utils/collectionStatus';
+import SyndicateSelector from './SyndicateSelector';
 
 const CATEGORY_LABELS: Record<CollectionCategory, string> = {
   expenses: 'הוצאות',
@@ -225,12 +226,9 @@ const LloydsCollectionTracker: React.FC<LloydsCollectionTrackerProps> = ({
           </label>
           <label className="text-sm font-medium text-slate-700">
             סינדיקט
-            <input
-              type="text"
+            <SyndicateSelector
               value={form.syndicate}
-              onChange={e => setForm(current => ({ ...current, syndicate: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-              placeholder="Syndicate"
+              onChange={next => setForm(current => ({ ...current, syndicate: next }))}
             />
           </label>
           <label className="text-sm font-medium text-slate-700">
@@ -410,13 +408,9 @@ const LloydsCollectionTracker: React.FC<LloydsCollectionTrackerProps> = ({
               </label>
               <label className="text-sm font-medium text-slate-700">
                 סינדיקט
-                <input
-                  type="text"
+                <SyndicateSelector
                   value={editForm.syndicate}
-                  onChange={e =>
-                    setEditForm(current => ({ ...current, syndicate: e.target.value }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  onChange={next => setEditForm(current => ({ ...current, syndicate: next }))}
                 />
               </label>
               <label className="text-sm font-medium text-slate-700">
