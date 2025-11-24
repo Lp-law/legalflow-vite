@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, ChevronLeft, Plus, Download } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
+import type { ForecastResult } from '../services/forecastService';
 import DailyDetailModal from './DailyDetailModal';
 import { exportToCSV } from '../services/exportService';
 import { addTotals } from '../utils/cashflow';
@@ -18,6 +19,7 @@ interface MonthlyFlowProps {
   onToggleStatus: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount: (id: string, amount: number) => void;
   onUpdateLoanAmount: (id: string, amount: number) => void;
+  forecastResult?: ForecastResult;
   systemToolsToolbar?: ReactNode;
 }
 
@@ -61,6 +63,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   onToggleStatus,
   onUpdateTaxAmount,
   onUpdateLoanAmount,
+  forecastResult,
   systemToolsToolbar
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -438,7 +441,13 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
       : `יתרה לחודש ${monthLabel}`;
 
   const heroMonthEndBalanceValue = lastDayEntry?.balance ?? monthStartBalance;
+  const heroForecastValue = forecastResult?.forecast ?? heroMonthEndBalanceValue;
   const heroMonthEndSubtitle = `סוף ${formatDate(monthEndDate)}`;
+  const heroForecastSubtitle = forecastResult
+    ? `טווח ביטחון: ${formatCurrency(forecastResult.confidenceLow)} - ${formatCurrency(
+        forecastResult.confidenceHigh
+      )}`
+    : heroMonthEndSubtitle;
 
   const BalanceHeroCard = ({
     title,
@@ -567,8 +576,8 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             />
             <BalanceHeroCard
               title="יתרה צפויה לסוף החודש"
-              value={heroMonthEndBalanceValue}
-              subtitle={heroMonthEndSubtitle}
+              value={heroForecastValue}
+              subtitle={heroForecastSubtitle}
               gradientClass="bg-gradient-to-br from-emerald-600 to-lime-500"
             />
         </div>

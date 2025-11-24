@@ -4,6 +4,7 @@ import {
   Cell, PieChart, Pie
 } from 'recharts';
 import type { Transaction } from '../types';
+import type { ForecastResult } from '../services/forecastService';
 import { CATEGORIES } from '../constants';
 import { TrendingUp, TrendingDown, Wallet, Scale, Activity, Info, Download } from 'lucide-react';
 import { exportToCSV } from '../services/exportService';
@@ -15,6 +16,7 @@ import FeeSummaryModal from './FeeSummaryModal';
 interface DashboardProps {
   transactions: Transaction[];
   initialBalance: number;
+  forecastResult: ForecastResult;
 }
 
 const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
@@ -22,6 +24,7 @@ const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
 const Dashboard: React.FC<DashboardProps> = ({
   transactions,
   initialBalance,
+  forecastResult,
 }) => {
   const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const today = useMemo(() => new Date(), []);
@@ -328,7 +331,13 @@ const Dashboard: React.FC<DashboardProps> = ({
       ['KPI', 'יתרה נוכחית (תזרים)', todaysBalance, `יתרת פתיחה: ₪${monthStartBalance.toLocaleString()}`],
       ['KPI', 'סה"כ הכנסות', summary.income, ''],
       ['KPI', 'סה"כ הוצאות', summary.expenses, ''],
-      ['KPI', 'התאמות בנק נטו', bankAdjustmentNet, '']
+      ['KPI', 'התאמות בנק נטו', bankAdjustmentNet, ''],
+      [
+        'KPI',
+        'תחזית סוף חודש',
+        forecastResult.forecast,
+        `טווח ביטחון: ₪${forecastResult.confidenceLow.toLocaleString()} - ₪${forecastResult.confidenceHigh.toLocaleString()}`,
+      ],
     ];
 
     chartData.forEach(point => {
@@ -392,11 +401,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <BalanceHeroCard
           title="יתרה צפויה"
-          value={monthEndBalance}
+          value={forecastResult.forecast}
           icon={Scale}
           accentBgClass="bg-amber-50"
           accentIconClass="text-amber-600"
-          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
+          subtitle={`טווח ביטחון: ₪${forecastResult.confidenceLow.toLocaleString()} - ₪${forecastResult.confidenceHigh.toLocaleString()}`}
         />
       </div>
 

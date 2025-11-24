@@ -38,6 +38,7 @@ import { calculateOverdueDays } from './utils/collectionStatus';
 import OverdueAlertsPanel from './components/OverdueAlertsPanel';
 import type { OverdueAlertEntry } from './components/OverdueAlertsPanel';
 import SystemToolsToolbar from './components/SystemToolsToolbar';
+import { calculateForecast } from './services/forecastService';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -420,6 +421,21 @@ const App: React.FC = () => {
 
     return initialBalance + income - expenses;
   };
+
+  const currentBalanceValue = useMemo(
+    () => calculateCurrentBalance(),
+    [transactions, initialBalance]
+  );
+
+  const forecastResult = useMemo(
+    () =>
+      calculateForecast({
+        transactions,
+        currentBalance: currentBalanceValue,
+        initialBalance,
+      }),
+    [transactions, currentBalanceValue, initialBalance]
+  );
 
   const handleBackNavigation = () => {
     if (window.history.length > 1) {
@@ -1032,6 +1048,7 @@ const App: React.FC = () => {
               onToggleStatus={handleToggleTransactionStatus}
               onUpdateTaxAmount={handleUpdateTaxAmount}
               onUpdateLoanAmount={handleUpdateLoanAmount}
+              forecastResult={forecastResult}
               systemToolsToolbar={
                 <SystemToolsToolbar
                   syncStatus={syncStatus}
@@ -1055,6 +1072,7 @@ const App: React.FC = () => {
             <Dashboard 
               transactions={transactions} 
               initialBalance={initialBalance}
+              forecastResult={forecastResult}
             />
           )}
 
