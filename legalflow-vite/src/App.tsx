@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Upload, Menu, Bell } from 'lucide-react';
+import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, Bell } from 'lucide-react';
 import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem } from './types';
 import {
   getTransactions,
