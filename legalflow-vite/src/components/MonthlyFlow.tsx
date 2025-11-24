@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronRight, ChevronLeft, Plus, Download } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Plus, Download, ChevronDown } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
 import type { ForecastResult } from '../services/forecastService';
 import DailyDetailModal from './DailyDetailModal';
@@ -56,6 +56,28 @@ const getSignedAmountForTooltip = (transaction: Transaction, group: TransactionG
   return transaction.type === 'expense' ? -baseAmount : baseAmount;
 };
 
+const GROUP_ORDER: TransactionGroup[] = [
+  'fee',
+  'other_income',
+  'operational',
+  'tax',
+  'loan',
+  'personal',
+  'bank_adjustment',
+];
+
+const GROUP_LABELS: Record<TransactionGroup, string> = {
+  fee: 'שכר טרחה',
+  other_income: 'הכנסות אחרות',
+  operational: 'הוצאות תפעול',
+  tax: 'תשלומי מיסים',
+  loan: 'הלוואות',
+  personal: 'משיכות פרטיות',
+  bank_adjustment: 'התאמות בנק',
+};
+
+const EMPTY_CATEGORY_LABEL = 'ללא קטגוריה';
+
 const MonthlyFlow: React.FC<MonthlyFlowProps> = ({ 
   transactions, 
   initialBalance, 
@@ -95,6 +117,15 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     group: null,
     transactions: [],
   });
+  const [expandedGroups, setExpandedGroups] = useState<Record<TransactionGroup, boolean>>(() =>
+    GROUP_ORDER.reduce(
+      (acc, group) => {
+        acc[group] = true;
+        return acc;
+      },
+      {} as Record<TransactionGroup, boolean>
+    )
+  );
 
   // --- Date Logic ---
   const monthStartDate = useMemo(
@@ -341,6 +372,73 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     }, empty);
   }, [dailyData]);
 
+  const monthTransactionsForView = useMemo(() => {
+    return transactions.filter(t => {
+      const txDate = parseDateKey(t.date);
+      return (
+        txDate.getFullYear() === currentDate.getFullYear() &&
+        txDate.getMonth() === currentDate.getMonth()
+      );
+    });
+  }, [transactions, currentDate]);
+
+  type GroupCategorySummary = {
+    category: string;
+    committed: number;
+    pending: number;
+    total: number;
+    count: number;
+  };
+
+  // UI-only grouped data for the collapsible section
+  const groupedCategoryData = useMemo<Record<TransactionGroup, GroupCategorySummary[]>>(() => {
+    const workingMaps = GROUP_ORDER.reduce(
+      (acc, group) => {
+        acc[group] = {};
+        return acc;
+      },
+      {} as Record<TransactionGroup, Record<string, GroupCategorySummary>>
+    );
+
+    monthTransactionsForView.forEach(transaction => {
+      const group = transaction.group;
+      if (!workingMaps[group]) {
+        return;
+      }
+      const categoryKey = transaction.category?.trim() || EMPTY_CATEGORY_LABEL;
+      if (!workingMaps[group][categoryKey]) {
+        workingMaps[group][categoryKey] = {
+          category: categoryKey,
+          committed: 0,
+          pending: 0,
+          total: 0,
+          count: 0,
+        };
+      }
+
+      const bucket = workingMaps[group][categoryKey];
+      const normalizedAmount =
+        group === 'bank_adjustment' ? transaction.amount : Math.abs(transaction.amount);
+
+      if (transaction.status === 'completed') {
+        bucket.committed += normalizedAmount;
+      } else {
+        bucket.pending += normalizedAmount;
+      }
+      bucket.total = bucket.committed + bucket.pending;
+      bucket.count += 1;
+    });
+
+    return GROUP_ORDER.reduce(
+      (acc, group) => {
+        const values = Object.values(workingMaps[group] || {});
+        acc[group] = values.sort((a, b) => b.total - a.total);
+        return acc;
+      },
+      {} as Record<TransactionGroup, GroupCategorySummary[]>
+    );
+  }, [monthTransactionsForView]);
+
   const totalIncomeAllSources = useMemo(
     () => monthSummary.fee + monthSummary.otherIncome,
     [monthSummary.fee, monthSummary.otherIncome]
@@ -395,6 +493,20 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
       const type = (group === 'fee' || group === 'other_income') ? 'income' : 'expense';
       openTransactionForm(dateStr, type, group);
     }
+  };
+
+  const toggleGroupSection = (group: TransactionGroup) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [group]: !prev[group],
+    }));
+  };
+
+  const formatGroupValue = (group: TransactionGroup, value: number) => {
+    if (group === 'bank_adjustment') {
+      return formatSignedCurrency(value);
+    }
+    return formatCurrency(Math.abs(value));
   };
 
   const handleExportToCSV = () => {
@@ -591,6 +703,79 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             {systemToolsToolbar}
           </div>
         )}
+      </div>
+
+      {/* Grouped by category view */}
+      <div className="bg-[var(--law-panel)] rounded-2xl border border-[var(--law-border)] shadow-lg">
+        <div className="flex items-center justify-between p-4 border-b border-white/10 flex-wrap gap-2">
+          <div>
+            <p className="text-sm font-semibold text-white">קיבוץ לפי קבוצות וקטגוריות</p>
+            <p className="text-xs text-slate-400">
+              פתחו כל קבוצה כדי לראות את הקטגוריות המרכיבות אותה החודש
+            </p>
+          </div>
+        </div>
+        <div className="divide-y divide-white/5">
+          {GROUP_ORDER.map(group => {
+            const categories = groupedCategoryData[group] || [];
+            const groupTotal = categories.reduce((sum, cat) => sum + cat.total, 0);
+            const isExpanded = expandedGroups[group];
+            return (
+              <div key={group}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroupSection(group)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-right text-sm text-white hover:bg-white/5 transition-colors"
+                >
+                  <div>
+                    <p className="font-semibold">{GROUP_LABELS[group]}</p>
+                    <p className="text-[11px] text-slate-400">{categories.length || 0} קטגוריות</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-[var(--law-gold)]">
+                      {formatGroupValue(group, groupTotal)}
+                    </span>
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    />
+                  </div>
+                </button>
+                {isExpanded && (
+                  <div className="px-4 pb-4 space-y-2">
+                    {categories.length === 0 ? (
+                      <div className="text-xs text-slate-400 pl-2">אין נתונים בקבוצה זו</div>
+                    ) : (
+                      categories.map(category => (
+                        <div
+                          key={`${group}-${category.category}`}
+                          className="flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-white">{category.category}</p>
+                            <p className="text-[11px] text-slate-400">
+                              {category.count} תנועות{' '}
+                              {category.pending > 0 && '· כולל סכומים צפויים'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-[var(--law-gold)]">
+                              {formatGroupValue(group, category.total)}
+                            </p>
+                            {category.pending > 0 && (
+                              <p className="text-[11px] text-amber-200">
+                                {formatGroupValue(group, category.pending)} צפוי
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Main Grid */}
