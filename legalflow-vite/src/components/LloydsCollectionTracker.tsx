@@ -283,8 +283,9 @@ const LloydsCollectionTracker: React.FC<LloydsCollectionTrackerProps> = ({
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
         <table className="min-w-full text-right text-sm">
-          <thead className="bg-slate-50 text-slate-600 text-xs font-bold">
+          <thead className="bg-slate-50 text-slate-600 text-xs font-bold sticky top-0 z-10">
             <tr>
+              <th className="px-3 py-3 hidden md:table-cell w-12">#</th>
               <th className="px-4 py-3">מספר חשבון עסקה</th>
               <th className="px-4 py-3">שם התובע</th>
               <th className="px-4 py-3">שם המבוטח</th>
@@ -298,17 +299,20 @@ const LloydsCollectionTracker: React.FC<LloydsCollectionTrackerProps> = ({
           <tbody className="divide-y divide-slate-100">
             {sortedItems.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-slate-500 text-center">
+                <td colSpan={9} className="px-4 py-6 text-slate-500 text-center">
                   אין נתונים להצגה.
                 </td>
               </tr>
             )}
-            {sortedItems.map(item => {
+            {sortedItems.map((item, index) => {
               const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
               const overdueLabel = formatOverdueLabel(overdueDays);
-              const rowClasses = overdueDays !== null ? 'bg-red-50 text-red-800' : '';
+              const zebraClass = index % 2 === 0 ? 'bg-white' : 'bg-[#f8f8f8]';
+              const baseClass = overdueDays !== null ? 'bg-red-50 text-red-800 hover:bg-red-100' : `${zebraClass}`;
+              const rowClasses = `${baseClass} hover:bg-[#eef5ff] transition-colors`;
               return (
                 <tr key={item.id} id={`lloyds-row-${item.id}`} className={rowClasses}>
+                  <td className="px-3 py-3 text-xs text-slate-500 font-semibold hidden md:table-cell">{index + 1}</td>
                   <td className="px-4 py-3 font-semibold">{item.accountNumber}</td>
                   <td className="px-4 py-3">{item.claimantName || '-'}</td>
                   <td className="px-4 py-3">{item.insuredName || '-'}</td>

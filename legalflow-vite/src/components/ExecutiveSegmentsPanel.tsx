@@ -412,8 +412,9 @@ const ExecutiveSegmentsPanel: React.FC<ExecutiveSegmentsPanelProps> = ({
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-right text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
+            <thead className="bg-slate-50 text-xs text-slate-500 sticky top-0 z-10">
               <tr>
+                <th className="px-3 py-3 hidden md:table-cell w-12">#</th>
                 <th className="px-4 py-3 font-semibold">מקור</th>
                 <th className="px-4 py-3 font-semibold">מספר חשבון עסקה</th>
                 <th className="px-4 py-3 font-semibold">שם</th>
@@ -426,13 +427,17 @@ const ExecutiveSegmentsPanel: React.FC<ExecutiveSegmentsPanelProps> = ({
             <tbody className="divide-y divide-slate-100">
               {tableRows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-slate-500 text-sm">
+                  <td colSpan={8} className="px-4 py-6 text-center text-slate-500 text-sm">
                     אין רשומות התואמות למסננים הנוכחיים.
                   </td>
                 </tr>
               )}
-              {tableRows.map(row => (
-                <tr key={`${row.source}-${row.id}`}>
+              {tableRows.map((row, index) => (
+                <tr
+                  key={`${row.source}-${row.id}`}
+                  className={`${index % 2 === 0 ? 'bg-white' : 'bg-[#f8f8f8]'} hover:bg-[#eef5ff] transition-colors`}
+                >
+                  <td className="px-3 py-3 text-xs text-slate-500 hidden md:table-cell">{index + 1}</td>
                   <td className="px-4 py-3 text-slate-700 text-xs font-semibold">
                     {SOURCE_META[row.source].label}
                   </td>

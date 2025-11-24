@@ -586,6 +586,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                 <table className="w-full text-sm text-center border-collapse relative min-w-[900px]">
                     <thead className="bg-slate-900 text-white text-xs sticky top-0 z-20 shadow-sm">
                         <tr>
+                            <th className="px-2 py-3 font-medium border-r border-slate-700 hidden md:table-cell w-12">#</th>
                             <th className="px-2 py-3 font-medium w-[90px]">תאריך</th>
                             {/* Fee Column */}
                             <th className="px-2 py-3 font-bold bg-emerald-900 border-r border-slate-700">שכר טרחה</th>
@@ -600,15 +601,21 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                        {dailyData.map((day) => {
+                        {dailyData.map((day, index) => {
                              const isWeekend = day.date.getDay() === 5 || day.date.getDay() === 6; 
                              const isToday = day.dateStr === formatDateKey(new Date());
+                             const baseColor = index % 2 === 0 ? '#ffffff' : '#f8f8f8';
+                             const weekendColor = '#f1f5f9';
+                             const rowBg = !isToday ? (isWeekend ? weekendColor : baseColor) : undefined;
                              const rowClass = isToday 
-                                ? 'bg-blue-100 relative z-10 ring-2 ring-blue-600 ring-inset shadow-md' 
-                                : `hover:bg-slate-50 transition-colors ${isWeekend ? 'bg-slate-50/50' : ''}`;
+                                ? 'bg-blue-100 relative z-10 ring-2 ring-blue-600 ring-inset shadow-md hover:bg-blue-100'
+                                : 'hover:bg-[#eef5ff] transition-colors';
 
                              return (
-                            <tr key={day.dateStr} className={rowClass}>
+                            <tr key={day.dateStr} className={rowClass} style={rowBg ? { backgroundColor: rowBg } : undefined}>
+                                <td className="px-2 py-2 border-l border-slate-100 text-xs text-slate-400 font-medium hidden md:table-cell">
+                                    {index + 1}
+                                </td>
                                 <td className={`px-2 py-2 border-l border-slate-100 font-medium sticky right-0 z-0 ${isToday ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-500 bg-inherit'}`}>
                                     {formatDate(day.date)}
                                     {isToday && <span className="block text-[10px] text-blue-600 font-normal">היום</span>}

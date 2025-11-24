@@ -128,8 +128,9 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
         
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-right">
-            <thead className="bg-slate-100 text-slate-600 font-bold">
+            <thead className="bg-slate-100 text-slate-600 font-bold sticky top-0 z-10">
               <tr>
+                <th className="px-3 py-4 hidden md:table-cell w-12">#</th>
                 <th className="px-6 py-4">תאריך דרישה</th>
                 <th className="px-6 py-4">לקוח</th>
                 <th className="px-6 py-4">אסמכתא/תיק</th>
@@ -142,7 +143,7 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
             <tbody className="divide-y divide-slate-100">
               {pendingItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center gap-2">
                         <CheckCircle className="w-10 h-10 text-emerald-400" />
                         <span className="text-lg font-medium text-slate-600">אין חובות פתוחים</span>
@@ -151,12 +152,16 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
                   </td>
                 </tr>
               ) : (
-                pendingItems.map((t) => {
+                pendingItems.map((t, index) => {
                   const daysOpen = calculateDaysOpen(t.date);
                   const isOverdue = daysOpen > 30;
                   
                   return (
-                    <tr key={t.id} className={`transition-all ${isOverdue ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}>
+                    <tr
+                      key={t.id}
+                      className={`transition-all ${isOverdue ? 'bg-red-50 text-red-800' : index % 2 === 0 ? 'bg-white' : 'bg-[#f8f8f8]'} hover:bg-[#eef5ff]`}
+                    >
+                      <td className="px-3 py-4 text-xs text-slate-500 hidden md:table-cell">{index + 1}</td>
                       <td className="px-6 py-4 font-medium text-slate-700">
                         {parseDateKey(t.date).toLocaleDateString('he-IL')}
                       </td>
@@ -196,6 +201,7 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
             {pendingItems.length > 0 && (
               <tfoot className="bg-slate-50 text-slate-700 font-semibold">
                 <tr>
+                  <td className="px-6 py-4 hidden md:table-cell" />
                   <td colSpan={3} className="px-6 py-4 text-right">סה"כ לתשלום</td>
                   <td className="px-6 py-4">₪{totalFeeDue.toLocaleString()}</td>
                   <td className="px-6 py-4">₪{totalReimbursementDue.toLocaleString()}</td>
