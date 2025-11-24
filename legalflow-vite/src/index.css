@@ -4,14 +4,19 @@
 
 :root {
   font-family: 'Assistant', sans-serif;
-  background-color: #f8fafc;
-  color: #0f172a;
+  --law-bg: #040a17;
+  --law-panel: rgba(15, 23, 42, 0.85);
+  --law-card: rgba(10, 18, 34, 0.9);
+  --law-border: rgba(255, 255, 255, 0.08);
+  --law-gold: #d4af37;
+  --law-text: #f8fafc;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: #f8fafc;
+  background: radial-gradient(circle at top, #0a1933, #050912 55%);
+  color: var(--law-text);
   direction: rtl;
 }
 
@@ -22,4 +27,131 @@ h4,
 h5,
 h6 {
   font-family: 'Heebo', sans-serif;
+}
+
+@keyframes highlightFlash {
+  0% {
+    background-color: rgba(212, 175, 55, 0.3);
+  }
+  60% {
+    background-color: rgba(212, 175, 55, 0.1);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes fadeOutSoft {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes modalOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalContent {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pageFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.highlight-flash {
+  animation: highlightFlash 1.2s ease-in-out;
+}
+
+.fade-out-soft {
+  animation: fadeOutSoft 0.28s ease forwards;
+}
+
+.modal-overlay {
+  animation: modalOverlay 0.25s ease forwards;
+}
+
+.modal-content {
+  animation: modalContent 0.25s ease forwards;
+}
+
+.page-fade {
+  animation: pageFade 0.35s ease;
+}
+
+.law-card {
+  background: var(--law-panel);
+  border: 1px solid var(--law-border);
+  border-radius: 1.25rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  padding: clamp(1rem, 1.5vw, 1.75rem);
+}
+
+.law-card-compact {
+  background: rgba(8, 15, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+  padding: 1rem;
+}
+
+.law-section-title {
+  color: var(--law-gold);
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.law-button-primary {
+  background: linear-gradient(135deg, #d4af37, #b37a12);
+  color: #1f2937;
+  border-radius: 999px;
+  padding: 0.65rem 1.5rem;
+  font-weight: 600;
+  border: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 15px 35px rgba(212, 175, 55, 0.3);
+}
+
+.law-button-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 25px 45px rgba(212, 175, 55, 0.4);
+}
+
+.law-button-secondary {
+  border: 1px solid var(--law-border);
+  color: #e2e8f0;
+  border-radius: 999px;
+  padding: 0.65rem 1.3rem;
+  transition: background 0.2s ease, color 0.2s ease;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.law-button-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
 }

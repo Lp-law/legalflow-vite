@@ -293,23 +293,33 @@ const App: React.FC = () => {
       setTransactions(synced);
   };
 
+  const [recentTransactionIds, setRecentTransactionIds] = useState<string[]>([]);
+  const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!recentTransactionIds.length) return;
+    const timeout = setTimeout(() => setRecentTransactionIds([]), 1400);
+    return () => clearTimeout(timeout);
+  }, [recentTransactionIds]);
+
   const handleAddTransactionBatch = (newTransactions: Omit<Transaction, 'id'>[]) => {
-      const processedTransactions = newTransactions.map(t => {
-          const id = crypto.randomUUID();
-          let amount = t.amount;
-          if (t.group === 'loan') {
-            amount = Math.abs(t.amount);
-            rememberLoanOverride(id, amount);
-          }
-          return {
-            ...t,
-            amount,
-            id,
-          };
-      });
-      
-      const updatedList = [...transactions, ...processedTransactions];
-      updateTransactionsWithSync(updatedList);
+    const processedTransactions = newTransactions.map(t => {
+      const id = crypto.randomUUID();
+      let amount = t.amount;
+      if (t.group === 'loan') {
+        amount = Math.abs(t.amount);
+        rememberLoanOverride(id, amount);
+      }
+      return {
+        ...t,
+        amount,
+        id,
+      };
+    });
+
+    const updatedList = [...transactions, ...processedTransactions];
+    updateTransactionsWithSync(updatedList);
+    setRecentTransactionIds(processedTransactions.map(t => t.id));
   };
 
   const handleSubmitEditedTransaction = (updatedTransaction: Transaction) => {
@@ -337,14 +347,19 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTransaction = (id: string) => {
-    if(window.confirm('האם אתה בטוח שברצונך למחוק תנועה זו?')) {
-        const target = transactions.find(t => t.id === id);
-        const updatedList = transactions.filter(t => t.id !== id);
-        updateTransactionsWithSync(updatedList);
-        if (target?.group === 'loan') {
-          removeLoanOverride(id);
-        }
+    if (!window.confirm('האם אתה בטוח שברצונך למחוק תנועה זו?')) {
+      return;
     }
+    const target = transactions.find(t => t.id === id);
+    const updatedList = transactions.filter(t => t.id !== id);
+    setPendingDeletionId(id);
+    setTimeout(() => {
+      updateTransactionsWithSync(updatedList);
+      if (target?.group === 'loan') {
+        removeLoanOverride(id);
+      }
+      setPendingDeletionId(null);
+    }, 280);
   };
 
   const handleMarkAsPaid = (transaction: Transaction) => {
@@ -889,7 +904,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-[#040916] via-[#07142a] to-[#0c1f3c] font-sans text-slate-100">
       {bootstrapError && !isBootstrapping && (
         <div className="fixed top-4 left-4 right-4 z-40 md:left-auto md:right-10 md:w-auto">
           <div className="flex flex-col sm:flex-row items-center gap-3 bg-amber-100 border border-amber-300 text-amber-900 px-4 py-3 rounded-2xl shadow-lg">
@@ -914,21 +929,23 @@ const App: React.FC = () => {
 
       
       {/* Sidebar */}
-      <aside className="fixed top-0 right-0 h-full w-64 bg-slate-900 text-white shadow-xl z-20 hidden md:flex flex-col">
-        <div className="p-6 border-b border-slate-800 flex flex-col items-center justify-center py-8">
+      <aside className="fixed top-0 right-0 h-full w-64 bg-[#050b18]/95 backdrop-blur text-white shadow-2xl z-20 hidden md:flex flex-col border-l border-white/5">
+        <div className="p-6 border-b border-white/10 flex flex-col items-center justify-center py-8">
           <Logo />
-          <div className="mt-4 text-xs text-slate-500 uppercase tracking-wider font-medium flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-green-500" />
-            מחובר: {currentUser}
+          <div className="mt-4 text-xs text-slate-300 uppercase tracking-wider font-medium flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+            מחובר: <span className="text-[var(--law-gold)]">{currentUser}</span>
           </div>
         </div>
         
         <nav className="flex-1 p-4 space-y-2 mt-2 overflow-y-auto">
-          <div className="text-xs text-slate-500 font-bold px-4 mb-2 mt-2">תזרים ובקרה</div>
+          <div className="text-xs text-slate-400 font-bold px-4 mb-2 mt-2">תזרים ובקרה</div>
           <button 
             onClick={() => setActiveTab('flow')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'flow' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+              activeTab === 'flow'
+                ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                : 'text-slate-400 hover:bg-white/5'
             }`}
           >
             <Table2 className="w-5 h-5" />
@@ -936,19 +953,23 @@ const App: React.FC = () => {
           </button>
           <button 
             onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+              activeTab === 'dashboard'
+                ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                : 'text-slate-400 hover:bg-white/5'
             }`}
           >
             <LayoutDashboard className="w-5 h-5" />
             לוח בקרה
           </button>
 
-          <div className="text-xs text-slate-500 font-bold px-4 mb-2 mt-6">ניהול משרד</div>
+          <div className="text-xs text-slate-400 font-bold px-4 mb-2 mt-6">ניהול משרד</div>
           <button 
             onClick={() => setActiveTab('summary')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'summary' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+              activeTab === 'summary'
+                ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                : 'text-slate-400 hover:bg-white/5'
             }`}
           >
             <FileText className="w-5 h-5" />
@@ -957,8 +978,10 @@ const App: React.FC = () => {
 
            <button 
             onClick={() => setActiveTab('collection')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'collection' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+              activeTab === 'collection'
+                ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                : 'text-slate-400 hover:bg-white/5'
             }`}
           >
             <Briefcase className="w-5 h-5" />
@@ -966,8 +989,10 @@ const App: React.FC = () => {
           </button>
           <button 
             onClick={() => setActiveTab('collectionLloyds')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'collectionLloyds' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+              activeTab === 'collectionLloyds'
+                ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                : 'text-slate-400 hover:bg-white/5'
             }`}
           >
             <Briefcase className="w-5 h-5" />
@@ -975,8 +1000,10 @@ const App: React.FC = () => {
           </button>
           <button 
             onClick={() => setActiveTab('collectionGeneric')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'collectionGeneric' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+              activeTab === 'collectionGeneric'
+                ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                : 'text-slate-400 hover:bg-white/5'
             }`}
           >
             <Briefcase className="w-5 h-5" />
@@ -984,8 +1011,10 @@ const App: React.FC = () => {
           </button>
           <button 
             onClick={() => setActiveTab('collectionAccess')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'collectionAccess' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+              activeTab === 'collectionAccess'
+                ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                : 'text-slate-400 hover:bg-white/5'
             }`}
           >
             <Briefcase className="w-5 h-5" />
@@ -993,10 +1022,10 @@ const App: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('tasks')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
               activeTab === 'tasks'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                : 'text-slate-400 hover:bg-white/5'
             }`}
           >
             <ListTodo className="w-5 h-5" />
@@ -1004,10 +1033,10 @@ const App: React.FC = () => {
           </button>
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-white/5">
           <button 
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/50 rounded-lg transition-colors text-sm"
+            className="w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-white/5 rounded-xl transition-colors text-sm"
           >
             <LogOut className="w-4 h-4" />
             התנתק
@@ -1016,7 +1045,7 @@ const App: React.FC = () => {
       </aside>
 
       {/* Mobile Header */}
-      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-30">
+      <div className="md:hidden bg-[#050b18]/95 backdrop-blur text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-30 border-b border-white/10">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 relative">
              <svg viewBox="0 0 100 100" className="w-full h-full">
@@ -1046,7 +1075,7 @@ const App: React.FC = () => {
         <div className="flex justify-end mb-4">
           <button
             onClick={handleBackNavigation}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400 transition-colors uppercase"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl border border-white/10 text-slate-200 hover:text-white hover:border-white/30 transition-colors uppercase"
           >
             BACK
             <ArrowRight className="w-4 h-4" />
@@ -1056,14 +1085,14 @@ const App: React.FC = () => {
         {activeTab !== 'flow' && (
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-slate-800">
+              <h2 className="text-2xl font-bold text-white">
                 {activeTab === 'dashboard' && 'סקירה חודשית'}
                 {activeTab === 'collection' && 'תשלומים צפויים'}
                 {activeTab === 'collectionLloyds' && 'מעקב גבייה – לוידס'}
                 {activeTab === 'collectionGeneric' && 'מעקב גבייה – לקוחות שונים'}
                 {activeTab === 'summary' && 'תקציר מנהלים'}
               </h2>
-              <p className="text-slate-500 text-sm mt-1">
+              <p className="text-slate-400 text-sm mt-1">
                 {new Date().toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </p>
             </div>
@@ -1072,7 +1101,8 @@ const App: React.FC = () => {
         )}
 
         {/* Views */}
-        <Suspense fallback={<div className="text-center text-slate-500 py-10">טוען נתונים...</div>}>
+        <Suspense fallback={<div className="text-center text-slate-400 py-10">טוען נתונים...</div>}>
+          <div key={activeTab} className="page-fade">
           {activeTab === 'flow' && (
             <MonthlyFlow 
               transactions={transactions}
@@ -1084,6 +1114,8 @@ const App: React.FC = () => {
               onUpdateTaxAmount={handleUpdateTaxAmount}
               onUpdateLoanAmount={handleUpdateLoanAmount}
               forecastResult={forecastResult}
+              recentTransactionIds={recentTransactionIds}
+              deletingTransactionId={pendingDeletionId}
               systemToolsToolbar={
                 <SystemToolsToolbar
                   syncStatus={syncStatus}
@@ -1115,6 +1147,8 @@ const App: React.FC = () => {
               <CollectionTracker 
                   transactions={transactions}
                   onMarkAsPaid={handleMarkAsPaid}
+                  recentTransactionIds={recentTransactionIds}
+                  deletingTransactionId={pendingDeletionId}
               />
           )}
 
@@ -1161,11 +1195,12 @@ const App: React.FC = () => {
           {activeTab === 'tasks' && (
             <TaskManager tasks={tasks} onChange={persistTasks} />
           )}
+          </div>
         </Suspense>
       </main>
 
       {/* Mobile Bottom Nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 z-30 safe-area-pb">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#050b18]/95 border-t border-white/10 p-3 z-30 safe-area-pb backdrop-blur">
         <div className="flex items-center gap-3 overflow-x-auto">
           <button onClick={() => setActiveTab('flow')} className={`flex flex-col items-center gap-1 min-w-[70px] ${activeTab === 'flow' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
             <Table2 className="w-6 h-6" />

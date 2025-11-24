@@ -307,21 +307,21 @@ const Dashboard: React.FC<DashboardProps> = ({
     accentTextClass?: string;
     subtitle?: string;
   }) => (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+    <div className="bg-white/5 p-6 rounded-2xl shadow-lg border border-white/10 hover:border-white/30 transition-colors text-slate-100">
       <div className="flex justify-between items-start mb-4">
-        <div className={`p-3 rounded-lg ${accentBgClass}`}>
+        <div className={`p-3 rounded-xl border border-white/10 bg-white/10 ${accentBgClass}`}>
           <Icon className={`w-6 h-6 ${accentTextClass}`} />
         </div>
         {typeof trend === 'number' && (
-          <span className={`text-sm font-medium ${trend > 0 ? 'text-green-600' : 'text-red-600'} flex items-center`}>
+          <span className={`text-sm font-medium ${trend > 0 ? 'text-emerald-300' : 'text-red-300'} flex items-center`}>
             {trend > 0 ? '+' : ''}{trend}%
             {trend > 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
           </span>
         )}
       </div>
-      <h3 className="text-slate-500 text-sm font-medium mb-1">{title}</h3>
-      <p className="text-2xl font-bold text-slate-800">₪{value.toLocaleString()}</p>
-      {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
+      <h3 className="text-slate-300 text-sm font-medium mb-1">{title}</h3>
+      <p className="text-2xl font-bold text-[var(--law-gold)]">₪{value.toLocaleString()}</p>
+      {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
     </div>
   );
 
@@ -376,35 +376,35 @@ const Dashboard: React.FC<DashboardProps> = ({
     accentIconClass: string;
     subtitle: string;
   }) => (
-    <div className={`rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4 ${accentBgClass}`}>
+    <div className={`rounded-2xl shadow-lg border border-white/10 p-6 flex flex-col gap-4 ${accentBgClass}`}>
       <div className="flex items-center gap-3">
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-white/80 ${accentIconClass}`}>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-white/10 border border-white/10 ${accentIconClass}`}>
           <Icon className="w-6 h-6" />
         </div>
-        <p className="text-base font-semibold text-slate-700">{title}</p>
+        <p className="text-base font-semibold text-white">{title}</p>
       </div>
-      <p className="text-4xl font-bold text-slate-900">₪{value.toLocaleString()}</p>
-      <p className="text-sm text-slate-600">{subtitle}</p>
+      <p className="text-4xl font-bold text-[var(--law-gold)]">₪{value.toLocaleString()}</p>
+      <p className="text-sm text-slate-300">{subtitle}</p>
     </div>
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-slate-100">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <BalanceHeroCard
           title="יתרה נוכחית"
           value={todaysBalance}
           icon={Wallet}
-          accentBgClass="bg-blue-50"
-          accentIconClass="text-blue-600"
+          accentBgClass="bg-gradient-to-br from-blue-900/40 to-blue-600/10"
+          accentIconClass="text-blue-300"
           subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
         />
         <BalanceHeroCard
           title="יתרה צפויה"
           value={forecastResult.forecast}
           icon={Scale}
-          accentBgClass="bg-amber-50"
-          accentIconClass="text-amber-600"
+          accentBgClass="bg-gradient-to-br from-amber-900/40 to-amber-500/10"
+          accentIconClass="text-amber-300"
           subtitle={`טווח ביטחון: ₪${forecastResult.confidenceLow.toLocaleString()} - ₪${forecastResult.confidenceHigh.toLocaleString()}`}
         />
       </div>
@@ -415,16 +415,16 @@ const Dashboard: React.FC<DashboardProps> = ({
           title="יתרה נוכחית" 
           value={todaysBalance} 
           icon={Wallet}
-          accentBgClass="bg-blue-100"
-          accentTextClass="text-blue-700"
+          accentBgClass="text-blue-300"
+          accentTextClass="text-blue-300"
           subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
         />
         <KPICard 
           title="יתרה צפויה" 
           value={monthEndBalance} 
           icon={Scale} 
-          accentBgClass="bg-amber-100"
-          accentTextClass="text-amber-700"
+          accentBgClass="text-amber-300"
+          accentTextClass="text-amber-300"
           subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
         />
         <KPICard 
@@ -432,49 +432,49 @@ const Dashboard: React.FC<DashboardProps> = ({
           value={summary.income} 
           icon={TrendingUp} 
           trend={12} 
-          accentBgClass="bg-emerald-100"
-          accentTextClass="text-emerald-600"
+          accentBgClass="text-emerald-300"
+          accentTextClass="text-emerald-300"
         />
         <KPICard 
           title="הוצאות החודש" 
           value={summary.expenses} 
           icon={TrendingDown} 
           trend={-5} 
-          accentBgClass="bg-red-100"
-          accentTextClass="text-red-600"
+          accentBgClass="text-red-300"
+          accentTextClass="text-red-300"
         />
         <KPICard 
           title="תזרים נטו" 
           value={summary.net} 
           icon={Scale} 
-          accentBgClass="bg-purple-100"
-          accentTextClass="text-purple-600"
+          accentBgClass="text-purple-300"
+          accentTextClass="text-purple-300"
         />
         <KPICard 
           title="רווח תפעולי" 
           value={operatingProfit}
           icon={Activity}
-          accentBgClass="bg-indigo-100"
-          accentTextClass="text-indigo-600"
+          accentBgClass="text-indigo-300"
+          accentTextClass="text-indigo-300"
         />
         <KPICard 
           title="רווח נטו" 
           value={netProfit}
           icon={Scale}
-          accentBgClass="bg-slate-100"
-          accentTextClass="text-slate-700"
+          accentBgClass="text-slate-300"
+          accentTextClass="text-slate-300"
         />
       </div>
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between gap-4">
+      <div className="law-card flex flex-col justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-slate-500 mb-1">ניתוח שכר טרחה</p>
-          <p className="text-base text-slate-600">
+          <p className="text-sm font-medium text-slate-300 mb-1">ניתוח שכר טרחה</p>
+          <p className="text-base text-slate-300">
             עקוב אחר תרומת לקוחות מיוחדים לשכר הטרחה בתאריכים נבחרים.
           </p>
         </div>
         <button
           onClick={() => setIsFeeSummaryOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-500 transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-slate-900 bg-gradient-to-l from-[#d4af37] to-[#b37a12] rounded-full shadow-lg hover:shadow-xl transition-colors"
         >
           סיכום שכר טרחה לפי סוג לקוח
           <Download className="w-4 h-4" />
@@ -485,57 +485,57 @@ const Dashboard: React.FC<DashboardProps> = ({
           title={'סה"כ שכר טרחה'}
           value={totalsByGroup.fee}
           icon={TrendingUp}
-          accentBgClass="bg-emerald-100"
-          accentTextClass="text-emerald-600"
+          accentBgClass="text-emerald-300"
+          accentTextClass="text-emerald-300"
         />
         <KPICard 
           title={'סה"כ הכנסות אחרות'}
           value={totalsByGroup.otherIncome}
           icon={TrendingUp}
-          accentBgClass="bg-teal-100"
-          accentTextClass="text-teal-600"
+          accentBgClass="text-teal-300"
+          accentTextClass="text-teal-300"
         />
         <KPICard 
           title={'סה"כ הוצאות'}
           value={totalsByGroup.operational}
           icon={TrendingDown}
-          accentBgClass="bg-amber-100"
-          accentTextClass="text-amber-600"
+          accentBgClass="text-amber-300"
+          accentTextClass="text-amber-300"
         />
         <KPICard 
           title={'סה"כ מיסים'}
           value={totalsByGroup.taxes}
           icon={Info}
-          accentBgClass="bg-yellow-100"
-          accentTextClass="text-yellow-600"
+          accentBgClass="text-yellow-300"
+          accentTextClass="text-yellow-300"
         />
         <KPICard 
           title={'סה"כ הלוואות'}
           value={totalsByGroup.loans}
           icon={TrendingDown}
-          accentBgClass="bg-rose-100"
-          accentTextClass="text-rose-600"
+          accentBgClass="text-rose-300"
+          accentTextClass="text-rose-300"
         />
         <KPICard 
           title={'סה"כ משיכות'}
           value={totalsByGroup.withdrawals}
           icon={TrendingDown}
-          accentBgClass="bg-pink-100"
-          accentTextClass="text-pink-600"
+          accentBgClass="text-pink-300"
+          accentTextClass="text-pink-300"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Trend Chart */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="lg:col-span-2 law-card">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-600" />
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-300" />
               מגמת יתרה יומית
             </h3>
             <button 
               onClick={handleExportDashboard}
-              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-500 font-semibold"
+              className="flex items-center gap-1 text-sm text-[var(--law-gold)] hover:text-white font-semibold"
             >
               <Download className="w-4 h-4" />
               ייצוא אקסל
@@ -550,24 +550,24 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.08)" />
                 <XAxis 
                   dataKey="date" 
                   tickFormatter={(val) => parseDateKey(String(val)).getDate().toString()}
                   axisLine={false}
                   tickLine={false}
-                  tick={{fill: '#94a3b8', fontSize: 12}}
+                  tick={{fill: '#cbd5f5', fontSize: 12}}
                 />
                 <YAxis 
                   axisLine={false}
                   tickLine={false}
-                  tick={{fill: '#94a3b8', fontSize: 12}}
+                  tick={{fill: '#cbd5f5', fontSize: 12}}
                   tickFormatter={(value) => `₪${(value/1000).toFixed(0)}k`}
                 />
                 <RechartsTooltip 
                   formatter={(value: number) => `₪${value.toLocaleString()}`}
                   labelFormatter={(label) => parseDateKey(String(label)).toLocaleDateString('he-IL')}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  contentStyle={{ borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: '#0b1426', color: '#f8fafc' }}
                 />
                 <Area 
                   type="monotone" 
@@ -583,8 +583,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Expenses Breakdown */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">התפלגות הוצאות</h3>
+        <div className="law-card">
+          <h3 className="text-lg font-bold text-white mb-6">התפלגות הוצאות</h3>
           <div className="h-[320px] w-full">
              {expensesByCategory.length > 0 ? (
                <div className="h-full flex flex-col lg:flex-row gap-4">
@@ -610,12 +610,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                  </div>
                  <div className="lg:w-56 max-h-[300px] overflow-auto space-y-2 pr-1">
                    {expensesByCategory.map(cat => (
-                     <div key={cat.name} className="flex items-center justify-between gap-2 text-sm text-slate-700">
+                     <div key={cat.name} className="flex items-center justify-between gap-2 text-sm text-slate-200">
                        <div className="flex items-center gap-2">
                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></span>
                          <span className="truncate">{cat.name}</span>
                        </div>
-                       <span className="font-semibold text-slate-900">₪{cat.value.toLocaleString()}</span>
+                       <span className="font-semibold text-[var(--law-gold)]">₪{cat.value.toLocaleString()}</span>
                      </div>
                    ))}
                  </div>

@@ -125,16 +125,16 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 modal-overlay">
+      <div className="bg-[#0b1426] text-slate-100 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-white/10 modal-content">
         
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-start">
+        <div className="p-5 border-b border-white/10 bg-white/5 flex justify-between items-start">
           <div>
-            <h3 className="text-lg font-bold text-slate-800">{getGroupTitle(group)}</h3>
-            <p className="text-sm text-slate-500">{formattedDate}</p>
+            <h3 className="text-lg font-bold text-white">{getGroupTitle(group)}</h3>
+            <p className="text-sm text-slate-300">{formattedDate}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -145,10 +145,10 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
             <p className="text-center text-slate-400 py-4">אין תנועות להצגה</p>
           ) : (
             transactions.map((t) => (
-              <div key={t.id} className="bg-white border border-slate-100 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow flex justify-between items-center group">
+              <div key={t.id} className="bg-white/5 border border-white/10 rounded-xl p-3 shadow-sm hover:shadow-lg transition-shadow flex justify-between items-center group">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-slate-800 text-base">₪{t.amount.toLocaleString()}</span>
+                    <span className="font-bold text-white text-base">₪{t.amount.toLocaleString()}</span>
                     {t.clientReference && (
                       <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">
                         #{t.clientReference}
@@ -167,7 +167,7 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
                       </button>
                     )}
                   </div>
-                  <p className="text-sm text-slate-600 font-medium">{t.description}</p>
+                  <p className="text-sm text-slate-200 font-medium">{t.description}</p>
                   <p className="text-xs text-slate-400">{t.category}</p>
                   {group === 'tax' && (t.category === 'מע"מ' || t.category === 'מס הכנסה אישי') && onUpdateTaxAmount && (
                     editingTaxTransactionId === t.id ? (
@@ -292,10 +292,10 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50">
+        <div className="p-4 border-t border-white/10 bg-white/5">
             <div className="flex justify-between items-center mb-4 px-1">
-                <span className="font-medium text-slate-600">סה"כ ליום זה:</span>
-                <span className={`font-bold text-lg ${isIncome ? 'text-emerald-600' : 'text-red-600'}`}>
+                <span className="font-medium text-slate-300">סה"כ ליום זה:</span>
+                <span className={`font-bold text-lg ${isIncome ? 'text-emerald-300' : 'text-red-300'}`}>
                     ₪{totalAmount.toLocaleString()}
                 </span>
             </div>
@@ -303,7 +303,7 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
                 onClick={() => {
                     onAdd();
                 }}
-                className="w-full py-2.5 bg-white border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-white/10 border border-white/10 text-white font-medium rounded-xl hover:bg-white/20 transition-colors flex items-center justify-center gap-2"
             >
                 <Plus className="w-4 h-4" />
                 הוסף תנועה נוספת

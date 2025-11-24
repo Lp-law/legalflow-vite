@@ -21,6 +21,8 @@ interface MonthlyFlowProps {
   onUpdateLoanAmount: (id: string, amount: number) => void;
   forecastResult?: ForecastResult;
   systemToolsToolbar?: ReactNode;
+  recentTransactionIds?: string[];
+  deletingTransactionId?: string | null;
 }
 
 type MonthSummary = {
@@ -64,6 +66,8 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   onUpdateTaxAmount,
   onUpdateLoanAmount,
   forecastResult,
+  recentTransactionIds,
+  deletingTransactionId,
   systemToolsToolbar
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -509,19 +513,19 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   // --- Render ---
   return (
     <>
-    <div className="space-y-6 h-full flex flex-col">
+    <div className="space-y-6 h-full flex flex-col text-slate-100">
       
       {/* Top Control Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-center bg-[var(--law-panel)] p-4 rounded-2xl shadow-lg border border-[var(--law-border)] gap-4">
         <div className="flex items-center gap-4">
             <button onClick={() => navigateMonth(-1)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                 <ChevronRight className="w-5 h-5 text-slate-600" />
             </button>
             <div className="text-center">
-                <h2 className="text-xl font-bold text-slate-800">
+                <h2 className="text-xl font-bold text-white">
                     {currentDate.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' })}
                 </h2>
-                <p className="text-xs text-slate-500 font-medium">יתרת פתיחה: {formatCurrency(monthStartBalance)}</p>
+                <p className="text-xs text-slate-400 font-medium">יתרת פתיחה: {formatCurrency(monthStartBalance)}</p>
             </div>
             <button onClick={() => navigateMonth(1)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                 <ChevronLeft className="w-5 h-5 text-slate-600" />
@@ -529,41 +533,41 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
         </div>
 
         <div className="flex flex-wrap gap-3 justify-end text-sm items-stretch w-full">
-            <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 text-center">
-                <span className="block text-xs text-emerald-500 mb-1">סה"כ שכר טרחה</span>
-                <span className="font-bold text-lg">{formatCurrency(monthSummary.fee)}</span>
+            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-gold-500 text-center shadow-inner">
+                <span className="block text-xs text-slate-300 mb-1">סה"כ שכר טרחה</span>
+                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(monthSummary.fee)}</span>
             </div>
-            <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-center">
-                <span className="block text-xs text-blue-500 mb-1">תזרים נטו</span>
-                <span className="font-bold text-lg">{formatCurrency(netCashflow)}</span>
+            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
+                <span className="block text-xs text-slate-300 mb-1">תזרים נטו</span>
+                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(netCashflow)}</span>
             </div>
-            <div className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 text-center">
-                <span className="block text-xs text-indigo-500 mb-1">רווח תפעולי</span>
-                <span className="font-bold text-lg">{formatCurrency(operatingProfit)}</span>
+            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
+                <span className="block text-xs text-slate-300 mb-1">רווח תפעולי</span>
+                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(operatingProfit)}</span>
             </div>
-            <div className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg border border-purple-100 text-center">
-                <span className="block text-xs text-purple-500 mb-1">רווח נטו</span>
-                <span className="font-bold text-lg">{formatCurrency(netProfit)}</span>
+            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
+                <span className="block text-xs text-slate-300 mb-1">רווח נטו</span>
+                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(netProfit)}</span>
             </div>
-            <div className="px-4 py-2 bg-slate-50 text-slate-700 rounded-lg border border-slate-200 text-center">
-                <span className="block text-xs text-slate-500 mb-1">סה"כ הוצאות</span>
-                <span className="font-bold text-lg">{formatCurrency(totalOperationalExpenses)}</span>
+            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
+                <span className="block text-xs text-slate-300 mb-1">סה"כ הוצאות</span>
+                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(totalOperationalExpenses)}</span>
             </div>
-            <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-lg border border-amber-200 text-center">
-                <span className="block text-xs text-amber-500 mb-1">סה"כ מיסים</span>
-                <span className="font-bold text-lg">{formatCurrency(totalTaxes)}</span>
+            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
+                <span className="block text-xs text-slate-300 mb-1">סה"כ מיסים</span>
+                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(totalTaxes)}</span>
             </div>
-            <div className="px-4 py-2 bg-rose-50 text-rose-700 rounded-lg border border-rose-200 text-center">
-                <span className="block text-xs text-rose-500 mb-1">סה"כ הלוואות</span>
-                <span className="font-bold text-lg">{formatCurrency(totalLoans)}</span>
+            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
+                <span className="block text-xs text-slate-300 mb-1">סה"כ הלוואות</span>
+                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(totalLoans)}</span>
             </div>
-            <div className="px-4 py-2 bg-pink-50 text-pink-700 rounded-lg border border-pink-200 text-center">
-                <span className="block text-xs text-pink-500 mb-1">סה"כ משיכות</span>
-                <span className="font-bold text-lg">{formatCurrency(totalWithdrawals)}</span>
+            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
+                <span className="block text-xs text-slate-300 mb-1">סה"כ משיכות</span>
+                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(totalWithdrawals)}</span>
             </div>
             <button 
               onClick={handleExportToCSV}
-              className="flex items-center gap-2 px-4 py-3 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-[var(--law-border)] bg-gradient-to-l from-[#1b2845] to-[#101929] text-white hover:from-[#203153] hover:to-[#131f33] transition"
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">אקסל</span>
@@ -590,7 +594,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
       </div>
 
       {/* Main Grid */}
-      <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[600px]">
+      <div className="flex-1 bg-[var(--law-panel)] rounded-2xl shadow-lg border border-[var(--law-border)] overflow-hidden flex flex-col min-h-[600px]">
             <div className="overflow-auto flex-1">
                 <table className="w-full text-sm text-center border-collapse relative min-w-[900px]">
                     <thead className="bg-slate-900 text-white text-xs sticky top-0 z-20 shadow-sm">
@@ -616,9 +620,29 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                              const baseColor = index % 2 === 0 ? '#ffffff' : '#f8f8f8';
                              const weekendColor = '#f1f5f9';
                              const rowBg = !isToday ? (isWeekend ? weekendColor : baseColor) : undefined;
-                             const rowClass = isToday 
-                                ? 'bg-blue-100 relative z-10 ring-2 ring-blue-600 ring-inset shadow-md hover:bg-blue-100'
-                                : 'hover:bg-[#eef5ff] transition-colors';
+                             const dayTransactions = [
+                                ...day.fee.transactions,
+                                ...day.otherIncome.transactions,
+                                ...day.operational.transactions,
+                                ...day.tax.transactions,
+                                ...day.loan.transactions,
+                                ...day.personal.transactions,
+                                ...day.bankAdjustment.transactions,
+                             ];
+                             const hasNewTransaction =
+                                recentTransactionIds?.some(id =>
+                                  dayTransactions.some(transaction => transaction.id === id)
+                                ) ?? false;
+                             const isDeletingRow =
+                                deletingTransactionId &&
+                                dayTransactions.some(transaction => transaction.id === deletingTransactionId);
+                             const rowClass = `${
+                                isToday
+                                  ? 'bg-blue-100 relative z-10 ring-2 ring-blue-600 ring-inset shadow-md hover:bg-blue-100'
+                                  : 'hover:bg-[#eef5ff] transition-colors'
+                              } ${hasNewTransaction ? 'highlight-flash' : ''} ${
+                                isDeletingRow ? 'fade-out-soft' : ''
+                              }`;
 
                              return (
                             <tr key={day.dateStr} className={rowClass} style={rowBg ? { backgroundColor: rowBg } : undefined}>
@@ -793,7 +817,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                         )})}
                     </tbody>
                     {/* FOOTER ROW */}
-                    <tfoot className="bg-slate-100 border-t-2 border-slate-300 text-xs sticky bottom-0 z-20 font-bold shadow-inner">
+                    <tfoot className="bg-white/10 border-t border-white/10 text-xs sticky bottom-0 z-20 font-bold shadow-inner text-white">
                         <tr>
                             <td className="px-2 py-3 text-right">סה"כ:</td>
                             
@@ -882,7 +906,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                 )}
                               </div>
                             </td>
-                            <td className="px-2 py-3 text-slate-800 border-r border-slate-300 bg-slate-200">
+                            <td className="px-2 py-3 text-white border-r border-white/10 bg-white/10">
                                 {formatCurrency(dailyData[dailyData.length-1]?.balance || 0)}
                             </td>
                         </tr>
@@ -942,21 +966,21 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             left: Math.min(cellTooltip.x, maxLeft),
           }}
         >
-          <div className="bg-white/95 backdrop-blur rounded-xl shadow-2xl border border-slate-200 p-3 w-64 max-h-64 overflow-auto">
-            <div className="text-xs font-semibold text-slate-500 mb-2">
+          <div className="bg-[#081124]/95 backdrop-blur rounded-2xl shadow-2xl border border-white/10 p-3 w-64 max-h-64 overflow-auto text-slate-100">
+            <div className="text-xs font-semibold text-slate-300 mb-2">
               {cellTooltip.title}
             </div>
             {cellTooltip.transactions.length === 0 ? (
               <p className="text-xs text-slate-400">אין תנועות ליום זה.</p>
             ) : (
-              <ul className="space-y-1 text-xs text-slate-600">
+              <ul className="space-y-1 text-xs text-slate-200">
                 {cellTooltip.transactions.map((transaction) => (
                   <li key={transaction.id} className="flex justify-between gap-2">
                     <div className="truncate">
-                      <span className="font-semibold text-slate-800 block truncate">
+                      <span className="font-semibold text-white block truncate">
                         {transaction.description || 'ללא תיאור'}
                       </span>
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-slate-400">
                         {transaction.category || 'ללא קטגוריה'} ·{' '}
                         {transaction.status === 'pending' ? 'צפוי' : 'שולם'}
                       </span>
@@ -977,11 +1001,11 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                 ))}
               </ul>
             )}
-            <div className="mt-2 text-xs font-bold text-slate-900 border-t border-slate-100 pt-2">
+            <div className="mt-2 text-xs font-bold text-white border-t border-white/10 pt-2">
               <div className="flex flex-col gap-1">
                 <span>סה"כ בתא: ₪{cellTooltip.total.toLocaleString()}</span>
                 {cellTooltip.group && (
-                  <span className="text-[11px] font-normal text-slate-500">
+                  <span className="text-[11px] font-normal text-slate-300">
                     השפעה על תזרים: {formatSignedCurrency(signedSum)}
                   </span>
                 )}

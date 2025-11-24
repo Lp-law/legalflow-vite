@@ -16,7 +16,7 @@ interface SystemToolsToolbarProps {
 }
 
 const buttonClass =
-  'px-3 py-1.5 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors';
+  'px-3 py-1.5 text-sm rounded-xl border border-white/10 text-slate-100 hover:bg-white/10 transition-colors backdrop-blur';
 
 const SystemToolsToolbar: React.FC<SystemToolsToolbarProps> = ({
   syncStatus,
@@ -32,23 +32,23 @@ const SystemToolsToolbar: React.FC<SystemToolsToolbarProps> = ({
   onOpenBalance,
   onShowAlerts,
 }) => (
-  <div className="flex flex-col gap-2 text-right">
-    <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-slate-500">
-      <span className="flex items-center gap-2 text-slate-400">
+  <div className="flex flex-col gap-2 text-right text-slate-100">
+    <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-slate-300">
+      <span className="flex items-center gap-2 text-slate-300">
         <span className={`w-2 h-2 rounded-full ${syncColorClass}`}></span>
-        <span className="font-semibold text-slate-600">{syncLabel}</span>
-        <span className="text-[11px] text-slate-500">{lastSyncText}</span>
+        <span className="font-semibold text-white">{syncLabel}</span>
+        <span className="text-[11px] text-slate-400">{lastSyncText}</span>
       </span>
       <button
         onClick={onManualSync}
         disabled={syncStatus === 'syncing'}
-        className="px-3 py-1 text-xs font-semibold rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400 disabled:border-slate-200"
+        className="px-3 py-1 text-xs font-semibold rounded-xl border border-white/10 text-slate-100 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-500 disabled:border-white/5"
       >
         {syncStatus === 'syncing' ? 'מסנכרן...' : 'סנכרון עכשיו'}
       </button>
     </div>
     {syncError && (
-      <div className="text-[11px] text-red-600">
+      <div className="text-[11px] text-red-300">
         {syncError}
       </div>
     )}
@@ -65,7 +65,7 @@ const SystemToolsToolbar: React.FC<SystemToolsToolbarProps> = ({
       <button onClick={onShowAlerts} className={`${buttonClass} flex items-center gap-2`}>
         <span>התראות</span>
         {alertsCount > 0 && (
-          <span className="rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-bold text-white">
+          <span className="rounded-full bg-red-500/80 px-2 py-0.5 text-[11px] font-bold text-white">
             {alertsCount}
           </span>
         )}
@@ -74,7 +74,7 @@ const SystemToolsToolbar: React.FC<SystemToolsToolbarProps> = ({
     {importFeedback && (
       <div
         className={`text-xs ${
-          importFeedback.type === 'success' ? 'text-emerald-600' : 'text-red-600'
+          importFeedback.type === 'success' ? 'text-emerald-300' : 'text-red-300'
         }`}
       >
         {importFeedback.message}

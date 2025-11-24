@@ -277,14 +277,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const filteredCategories = availableCategories.filter(c => c.group === group);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 modal-overlay">
+      <div className="bg-[#0b1426] text-slate-100 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border border-white/10 modal-content">
         
-        <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
-          <h2 className="text-xl font-bold text-slate-800">
+        <div className="flex justify-between items-center p-5 border-b border-white/10 bg-white/5">
+          <h2 className="text-xl font-bold text-white">
             {isEditing ? 'עריכת תנועה' : initialGroup ? 'הוספת תנועה' : 'הוספת תנועה חדשה'}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -375,10 +375,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-slate-200 mb-1">
                 סכום (₪)
                 {group === 'bank_adjustment' && (
-                  <span className="block text-[11px] text-slate-500 font-normal">
+                  <span className="block text-[11px] text-slate-400 font-normal">
                     ניתן להזין ערך שלילי (משיכה) או חיובי (הפקדה).
                   </span>
                 )}
@@ -393,7 +393,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setIsAmountManual(true);
                   setAmount(e.target.value);
                 }}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg font-semibold"
+                className="w-full px-3 py-2 border border-white/10 bg-white/5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg font-semibold text-white placeholder-slate-400"
                 autoFocus
               />
             </div>
