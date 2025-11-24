@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu } from 'lucide-react';
+import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle } from 'lucide-react';
 import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem } from './types';
 import {
   getTransactions,
@@ -49,6 +49,7 @@ const AccessCollectionTracker = lazy(() => import('./components/AccessCollection
 
 const CASHFLOW_CUTOFF = parseDateKey('2025-11-01');
 const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
+const BACKUP_SESSION_KEY = 'legalflow_backup_done_for_session';
 
 const normalizeTransactionDates = (list: Transaction[]) => {
   let didNormalize = false;
@@ -127,12 +128,26 @@ const App: React.FC = () => {
   const [accessItems, setAccessItems] = useState<AccessCollectionItem[]>(() => getAccessCollectionItems());
   const [highlightedCollection, setHighlightedCollection] = useState<{ type: 'lloyds' | 'generic' | 'access'; id: string } | null>(null);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
+  const [isBackupReminderOpen, setIsBackupReminderOpen] = useState(false);
+  const [backupReminderWarning, setBackupReminderWarning] = useState<string | null>(null);
+  const [hasSessionBackup, setHasSessionBackup] = useState<boolean>(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return sessionStorage.getItem(BACKUP_SESSION_KEY) === '1';
+  });
+  const [logoutWarning, setLogoutWarning] = useState<string | null>(null);
   const clearSession = useCallback(() => {
     setCurrentUser(null);
     setAuthToken(null);
     sessionStorage.removeItem('legalflow_user');
     sessionStorage.removeItem('legalflow_token');
     sessionStorage.removeItem('legalflow_daily_email_sent');
+    sessionStorage.removeItem(BACKUP_SESSION_KEY);
+    setHasSessionBackup(false);
+    setIsBackupReminderOpen(false);
+    setBackupReminderWarning(null);
+    setLogoutWarning(null);
     setIsBootstrapping(false);
     setBootstrapError(null);
     setSyncStatus('idle');
@@ -225,10 +240,23 @@ const App: React.FC = () => {
     setAuthToken(token);
     sessionStorage.setItem('legalflow_user', username);
     sessionStorage.setItem('legalflow_token', token);
+    sessionStorage.removeItem(BACKUP_SESSION_KEY);
+    setHasSessionBackup(false);
+    setIsBackupReminderOpen(true);
+    setBackupReminderWarning(null);
     setAuthError(null);
   };
 
   const handleLogout = () => {
+    const backupDone =
+      hasSessionBackup ||
+      (typeof window !== 'undefined' && sessionStorage.getItem(BACKUP_SESSION_KEY) === '1');
+    if (!backupDone) {
+      setLogoutWarning('לפני התנתקות יש לבצע גיבוי. פתח את חלון הגיבוי ובצע "ייצוא גיבוי".');
+      setIsBackupReminderOpen(true);
+      return;
+    }
+    setLogoutWarning(null);
     clearSession();
     setAuthError(null);
   };
@@ -647,8 +675,19 @@ const App: React.FC = () => {
     setIsMobileActionsOpen(false);
   };
 
-  const handleMobileExportClick = () => {
+  const performBackupExport = useCallback(() => {
     exportBackupJSON(transactions);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(BACKUP_SESSION_KEY, '1');
+    }
+    setHasSessionBackup(true);
+    setIsBackupReminderOpen(false);
+    setBackupReminderWarning(null);
+    setLogoutWarning(null);
+  }, [transactions]);
+
+  const handleMobileExportClick = () => {
+    performBackupExport();
     setIsMobileActionsOpen(false);
   };
 
@@ -663,8 +702,8 @@ const App: React.FC = () => {
   };
 
   const handleExportBackup = useCallback(() => {
-    exportBackupJSON(transactions);
-  }, [transactions]);
+    performBackupExport();
+  }, [performBackupExport]);
 
   const handleOpenBalanceModal = useCallback(() => {
     setIsBalanceModalOpen(true);
@@ -752,6 +791,25 @@ const App: React.FC = () => {
   const genericHighlightId = highlightedCollection?.type === 'generic' ? highlightedCollection.id : null;
   const accessHighlightId = highlightedCollection?.type === 'access' ? highlightedCollection.id : null;
 
+  useEffect(() => {
+    if (currentUser && authToken) {
+      if (!hasSessionBackup) {
+        setIsBackupReminderOpen(true);
+      }
+    } else {
+      setIsBackupReminderOpen(false);
+    }
+  }, [currentUser, authToken, hasSessionBackup]);
+
+  const handleBackupReminderDismiss = () => {
+    if (hasSessionBackup) {
+      setIsBackupReminderOpen(false);
+      setBackupReminderWarning(null);
+      return;
+    }
+    setBackupReminderWarning('נראה שעדיין לא בוצע גיבוי במושב הנוכחי');
+  };
+
   if (!currentUser || !authToken) {
     return (
       <div className="relative">
@@ -802,6 +860,14 @@ const App: React.FC = () => {
             >
               נסה שוב
             </button>
+          </div>
+        </div>
+      )}
+
+      {logoutWarning && (
+        <div className="fixed top-20 left-4 right-4 z-40 md:left-auto md:right-10 md:w-auto">
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl shadow-lg text-sm font-semibold">
+            {logoutWarning}
           </div>
         </div>
       )}
@@ -1203,6 +1269,39 @@ const App: React.FC = () => {
               >
                 שמור
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isBackupReminderOpen && currentUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 p-6 space-y-4 text-center">
+            <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-slate-800">
+                לידור – אל תשכח לבצע גיבוי
+              </h3>
+              <p className="text-sm text-slate-500">
+                זה לוקח פחות מדקה ויכול להציל לך חודש שלם של עבודה 🙂
+              </p>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={performBackupExport}
+                className="w-full rounded-xl bg-slate-900 text-white font-semibold py-3 hover:bg-slate-800 transition"
+              >
+                בצע גיבוי עכשיו
+              </button>
+              <button
+                onClick={handleBackupReminderDismiss}
+                className="w-full rounded-xl border border-slate-200 text-slate-600 font-semibold py-3 hover:bg-slate-50 transition"
+              >
+                כבר ביצעתי גיבוי
+              </button>
+              {backupReminderWarning && (
+                <p className="text-xs text-red-500 mt-2">{backupReminderWarning}</p>
+              )}
             </div>
           </div>
         </div>

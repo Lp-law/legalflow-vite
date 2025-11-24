@@ -36,7 +36,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
         
         <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">כניסה למערכת</h2>
-        <p className="text-center text-slate-500 mb-6 text-sm">ניהול תזרים - משרד עו"ד ליאור פרי</p>
+        <div className="text-center text-slate-500 mb-6 text-sm leading-relaxed">
+          <p>ניהול תזרים וגבייה</p>
+          <p>משרד עו"ד ליאור פרי</p>
+        </div>
         
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
