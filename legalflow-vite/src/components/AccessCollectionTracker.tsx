@@ -359,18 +359,24 @@ const AccessCollectionTracker: React.FC<AccessCollectionTrackerProps> = ({
             {sortedItems.map((item, index) => {
               const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
               const overdueLabel = formatOverdueLabel(overdueDays);
+              const isHighRisk = overdueDays !== null && overdueDays >= 90 && !item.isPaid;
               const zebraClass = index % 2 === 0 ? 'bg-white' : 'bg-[#f8f8f8]';
               let rowClasses = `${zebraClass} hover:bg-[#eef5ff] transition-colors`;
-              if (overdueDays !== null) {
+              if (overdueDays !== null && overdueDays >= 45 && !item.isPaid) {
                 rowClasses =
                   overdueDays >= 90
-                    ? 'bg-red-200 text-red-900 hover:bg-red-300 transition-colors'
+                    ? 'bg-red-900/20 text-red-100 ring-1 ring-red-400 hover:bg-red-900/30 transition-colors'
                     : 'bg-red-50 text-red-800 hover:bg-red-100 transition-colors';
               }
               return (
                 <tr key={item.id} id={`access-row-${item.id}`} className={rowClasses}>
                   <td className="px-3 py-3 text-xs text-slate-500 font-semibold hidden md:table-cell">{index + 1}</td>
-                  <td className="px-4 py-3 font-semibold">{item.accountNumber}</td>
+                  <td className="px-4 py-3 font-semibold">
+                    <div className="flex items-center gap-2 justify-end">
+                      {isHighRisk && <AlertTriangle className="w-4 h-4 text-red-400" />}
+                      <span>{item.accountNumber}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     {item.insuredName ? (
                       <button
@@ -417,9 +423,6 @@ const AccessCollectionTracker: React.FC<AccessCollectionTrackerProps> = ({
                       </button>
                       {overdueLabel && (
                         <span className="text-xs font-bold text-red-600 flex items-center gap-1">
-                          {overdueDays !== null && overdueDays >= 90 && (
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                          )}
                           {overdueLabel}
                         </span>
                       )}
