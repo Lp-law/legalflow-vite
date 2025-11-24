@@ -1266,6 +1266,7 @@ const App: React.FC = () => {
         initialType={transactionBeingEdited ? undefined : formInitialType}
         initialGroup={transactionBeingEdited ? undefined : formInitialGroup}
         transactionToEdit={transactionBeingEdited}
+        existingTransactions={transactions}
       />
 
       {isMobileActionsOpen && (

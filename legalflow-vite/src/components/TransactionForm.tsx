@@ -4,6 +4,7 @@ import { PAYMENT_METHODS } from '../constants';
 import { getAllCategories, saveCustomCategory, getClients, saveClient } from '../services/storageService';
 import type { Transaction, TransactionGroup } from '../types';
 import { formatDateKey } from '../utils/date';
+import { suggestCategoryForTransaction, type CategorySuggestion } from '../services/insightService';
 
 interface TransactionFormProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface TransactionFormProps {
   initialType?: 'income' | 'expense';
   initialGroup?: TransactionGroup;
   transactionToEdit?: Transaction | null;
+  existingTransactions?: Transaction[];
 }
 
 const sanitizeNumericInput = (value: string) => {
@@ -34,7 +36,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   initialDate,
   initialType,
   initialGroup,
-  transactionToEdit
+  transactionToEdit,
+  existingTransactions = [],
 }) => {
   const isEditing = Boolean(transactionToEdit);
   const [type, setType] = useState<'income' | 'expense'>('income');
@@ -61,6 +64,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringMonths, setRecurringMonths] = useState(12);
   const [loanEndMonth, setLoanEndMonth] = useState('');
+  const [categorySuggestion, setCategorySuggestion] = useState<CategorySuggestion | null>(null);
 
   // Flag to track manual override for tax calc. 
   // Generally user added transactions are "Manual" by definition relative to the auto-tax generator,
@@ -132,6 +136,40 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setIsAddingClient(false);
     setNewClientName('');
   }, [isOpen, initialDate, initialType, initialGroup, transactionToEdit]);
+
+  useEffect(() => {
+    if (!isOpen || transactionToEdit) {
+      setCategorySuggestion(null);
+      return;
+    }
+    if (!description && !clientReference && !amount) {
+      setCategorySuggestion(null);
+      return;
+    }
+    const numericAmount = sanitizeNumericInput(amount);
+    const draft: Partial<Transaction> = {
+      description,
+      clientReference,
+      amount: Number.isFinite(numericAmount) ? numericAmount : undefined,
+      group,
+      type,
+    };
+    const suggestion = suggestCategoryForTransaction(draft, existingTransactions);
+    setCategorySuggestion(suggestion);
+    if (!category && suggestion && suggestion.confidence >= 0.8) {
+      setCategory(suggestion.category);
+    }
+  }, [
+    amount,
+    category,
+    clientReference,
+    description,
+    existingTransactions,
+    group,
+    isOpen,
+    transactionToEdit,
+    type,
+  ]);
 
   const handleTypeChange = (newType: 'income' | 'expense') => {
       setType(newType);
@@ -452,6 +490,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             ))}
                             <option value="ADD_NEW" className="font-bold text-blue-600 bg-slate-50">➕ הוסף קטגוריה חדשה...</option>
                         </select>
+                    )}
+                    {categorySuggestion && categorySuggestion.category && category !== categorySuggestion.category && (
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        הצעה: {categorySuggestion.category}
+                        {categorySuggestion.confidence >= 0.5 &&
+                          ` (${Math.round(categorySuggestion.confidence * 100)}% ביטחון)`}
+                      </p>
                     )}
                 </div>
             )}

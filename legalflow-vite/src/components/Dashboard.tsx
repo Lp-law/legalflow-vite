@@ -12,6 +12,7 @@ import { addTotals, normalize } from '../utils/cashflow';
 import type { CashflowRow } from '../utils/cashflow';
 import { formatDateKey, parseDateKey } from '../utils/date';
 import FeeSummaryModal from './FeeSummaryModal';
+import { analyzeCashflow, generateAlerts, type InsightAlert } from '../services/insightService';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -388,6 +389,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     </div>
   );
 
+  const insights = useMemo(() => analyzeCashflow(transactions), [transactions]);
+  const insightAlerts = useMemo<InsightAlert[]>(() => generateAlerts(insights), [insights]);
+
+  const severityStyles: Record<InsightAlert['severity'], string> = {
+    info: 'border-blue-200/40 text-blue-200 bg-blue-900/30',
+    warning: 'border-amber-200/50 text-amber-200 bg-amber-900/20',
+    high: 'border-rose-300/60 text-rose-200 bg-rose-900/30',
+  };
+
   return (
     <div className="space-y-6 text-slate-100">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -464,6 +474,29 @@ const Dashboard: React.FC<DashboardProps> = ({
           accentBgClass="text-slate-300"
           accentTextClass="text-slate-300"
         />
+      </div>
+      <div className="law-card">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm font-semibold text-white">תובנות חכמות</p>
+            <p className="text-xs text-slate-400">
+              ניתוח טרנדים חריגים והתראות מבוססות נתונים פנימיים
+            </p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {insightAlerts.map(alert => (
+            <div
+              key={alert.id}
+              className={`rounded-2xl border px-4 py-3 text-sm ${severityStyles[alert.severity]}`}
+            >
+              {alert.message}
+            </div>
+          ))}
+          {!insightAlerts.length && (
+            <p className="text-xs text-slate-400">אין חריגות משמעותיות כרגע.</p>
+          )}
+        </div>
       </div>
       <div className="law-card flex flex-col justify-between gap-4">
         <div>
