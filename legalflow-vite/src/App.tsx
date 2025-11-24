@@ -171,7 +171,7 @@ const App: React.FC = () => {
           if (isTriggerWindow && lastSentForDay !== todayKey) {
               const subject = `סיכום תזרים יומי - ${now.toLocaleDateString('he-IL')}`;
               const body = encodeURIComponent(generateExecutiveSummary('month', transactions, initialBalance));
-              window.location.href = `mailto:lidor@lp-law.co.il,lior@lp-law.co.il?subject=${subject}&body=${body}`;
+              window.location.href = `mailto:lior@lp-law.co.il?subject=${subject}&body=${body}`;
               sessionStorage.setItem('legalflow_daily_email_sent', todayKey);
           }
       }, 1000);
@@ -694,7 +694,7 @@ const App: React.FC = () => {
             }`}
           >
             <Briefcase className="w-5 h-5" />
-            מעקב גבייה
+            תשלומים צפויים
           </button>
         </nav>
 
@@ -809,7 +809,7 @@ const App: React.FC = () => {
             <div>
               <h2 className="text-2xl font-bold text-slate-800">
                 {activeTab === 'dashboard' && 'סקירה חודשית'}
-                {activeTab === 'collection' && 'מעקב גבייה'}
+                {activeTab === 'collection' && 'תשלומים צפויים'}
                 {activeTab === 'summary' && 'תקציר מנהלים'}
               </h2>
               <p className="text-slate-500 text-sm mt-1">

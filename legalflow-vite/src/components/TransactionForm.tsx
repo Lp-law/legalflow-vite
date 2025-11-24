@@ -600,7 +600,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                 : (status === 'completed' ? 'שולם' : 'תשלום עתידי')}
                         </span>
                         <span className="text-xs text-slate-500">
-                            {type === 'income' && status === 'pending' && 'יופיע בדוח "מעקב גבייה" עד לתשלום'}
+                            {type === 'income' && status === 'pending' && 'יופיע בדוח "תשלומים צפויים" עד לתשלום'}
                         </span>
                     </div>
                 </div>

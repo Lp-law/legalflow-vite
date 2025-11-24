@@ -111,7 +111,7 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
           <div>
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-blue-600" />
-              מעקב גבייה (Aging Report)
+              תשלומים צפויים (Aging Report)
             </h3>
             <p className="text-sm text-slate-500 mt-1">
               רשימת דרישות תשלום/חשבונות עסקה פתוחים (שכר טרחה בלבד). שורות אדומות מסמנות פיגור של מעל 30 יום.

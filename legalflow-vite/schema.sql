@@ -22,6 +22,5 @@
 
      insert into users (username, password_hash, role)
      values
-       ('lidor', 'changeme', 'admin'),
        ('lior', 'changeme', 'admin')
      on conflict (username) do nothing;
