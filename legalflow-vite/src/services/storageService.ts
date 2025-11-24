@@ -1,4 +1,4 @@
-import type { Transaction, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem, CollectionCategory } from '../types';
+import type { Transaction, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem, CollectionCategory, TaskItem } from '../types';
 import { INITIAL_TRANSACTIONS, INITIAL_BALANCE, CATEGORIES, INITIAL_CLIENTS } from '../constants';
 
 const STORAGE_KEY_TRANSACTIONS = 'legalflow_transactions_v2';
@@ -10,6 +10,7 @@ const STORAGE_KEY_LLOYDS_COLLECTION = 'legalflow_lloyds_collection_v1';
 const STORAGE_KEY_GENERIC_COLLECTION = 'legalflow_generic_collection_v1';
 const STORAGE_KEY_ACCESS_COLLECTION = 'legalflow_access_collection_v1';
 const STORAGE_KEY_LLOYDS_SYNDICATES = 'legalflow_lloyds_syndicates_v1';
+const STORAGE_KEY_TASKS = 'legalflow_tasks_v1';
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 const DEFAULT_LLOYDS_SYNDICATES = ['WRB', 'QBE', 'DALE'];
 const normalizeSyndicateName = (value: unknown): string =>
@@ -132,6 +133,7 @@ const sanitizeTimestamp = (value: unknown, fallback: string): string =>
 type LloydsInput = Partial<LloydsCollectionItem> & Record<string, unknown>;
 type GenericInput = Partial<GenericCollectionItem> & Record<string, unknown>;
 type AccessInput = Partial<AccessCollectionItem> & Record<string, unknown>;
+type TaskInput = Partial<TaskItem> & Record<string, unknown>;
 
 const sanitizeLloydsItem = (input: unknown): LloydsCollectionItem | null => {
   if (!input || typeof input !== 'object') {
@@ -218,6 +220,31 @@ const sanitizeAccessItem = (input: unknown): AccessCollectionItem | null => {
     totalDeductible,
     outstandingBalance,
     isPaid: Boolean(raw.isPaid),
+    createdAt: sanitizeTimestamp(raw.createdAt, now),
+    updatedAt: sanitizeTimestamp(raw.updatedAt, now),
+  };
+};
+
+const sanitizeTaskItem = (input: unknown): TaskItem | null => {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+  const raw = input as TaskInput;
+  const client = normalizeText(raw.client);
+  const caseName = normalizeText(raw.caseName);
+  const deadline = sanitizeDateValue(raw.deadline);
+  if (!client || !caseName || !deadline) {
+    return null;
+  }
+  const amount = sanitizeAmount(raw.amount);
+  const now = new Date().toISOString();
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : generateId(),
+    client,
+    caseName,
+    amount: amount > 0 ? amount : undefined,
+    deadline,
+    status: raw.status === 'completed' ? 'completed' : 'open',
     createdAt: sanitizeTimestamp(raw.createdAt, now),
     updatedAt: sanitizeTimestamp(raw.updatedAt, now),
   };
@@ -586,6 +613,22 @@ export const replaceAccessCollectionItems = (nextItems: unknown): AccessCollecti
     .map(item => sanitizeAccessItem(item))
     .filter((item): item is AccessCollectionItem => Boolean(item));
   persistCollectionItems(STORAGE_KEY_ACCESS_COLLECTION, sanitized, 'accessCollection');
+  return sanitized;
+};
+
+export const getTasks = (): TaskItem[] =>
+  readCollectionItems<TaskItem>(STORAGE_KEY_TASKS, sanitizeTaskItem);
+
+export const saveTasks = (tasks: TaskItem[]) => {
+  persistCollectionItems(STORAGE_KEY_TASKS, tasks, 'tasks');
+};
+
+export const replaceTasks = (nextItems: unknown): TaskItem[] => {
+  const source = Array.isArray(nextItems) ? nextItems : [];
+  const sanitized = source
+    .map(item => sanitizeTaskItem(item))
+    .filter((item): item is TaskItem => Boolean(item));
+  persistCollectionItems(STORAGE_KEY_TASKS, sanitized, 'tasks');
   return sanitized;
 };
 

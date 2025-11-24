@@ -78,3 +78,14 @@ export interface AccessCollectionItem extends BaseCollectionItem {
   totalDeductible: number;
   outstandingBalance: number;
 }
+
+export interface TaskItem {
+  id: string;
+  client: string;
+  caseName: string;
+  amount?: number;
+  deadline: string; // YYYY-MM-DD
+  status: 'open' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+}

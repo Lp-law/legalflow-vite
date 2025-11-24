@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle } from 'lucide-react';
-import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem } from './types';
+import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, ListTodo } from 'lucide-react';
+import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem, TaskItem } from './types';
 import {
   getTransactions,
   saveTransactions,
@@ -25,6 +25,8 @@ import {
   getAccessCollectionItems,
   saveAccessCollectionItems,
   replaceAccessCollectionItems,
+  getTasks,
+  saveTasks,
   STORAGE_EVENT,
 } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
@@ -49,6 +51,7 @@ const ExecutiveSummary = lazy(() => import('./components/ExecutiveSummary'));
 const LloydsCollectionTracker = lazy(() => import('./components/LloydsCollectionTracker'));
 const GenericCollectionTracker = lazy(() => import('./components/GenericCollectionTracker'));
 const AccessCollectionTracker = lazy(() => import('./components/AccessCollectionTracker'));
+const TaskManager = lazy(() => import('./components/TaskManager'));
 
 const CASHFLOW_CUTOFF = parseDateKey('2025-11-01');
 const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
@@ -105,7 +108,14 @@ const App: React.FC = () => {
   
   // Updated tabs
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'flow' | 'collection' | 'summary' | 'collectionLloyds' | 'collectionGeneric' | 'collectionAccess'
+    | 'dashboard'
+    | 'flow'
+    | 'collection'
+    | 'summary'
+    | 'collectionLloyds'
+    | 'collectionGeneric'
+    | 'collectionAccess'
+    | 'tasks'
   >('flow');
 
   // Form initial state helpers
@@ -129,6 +139,7 @@ const App: React.FC = () => {
   const [lloydsItems, setLloydsItems] = useState<LloydsCollectionItem[]>(() => getLloydsCollectionItems());
   const [genericItems, setGenericItems] = useState<GenericCollectionItem[]>(() => getGenericCollectionItems());
   const [accessItems, setAccessItems] = useState<AccessCollectionItem[]>(() => getAccessCollectionItems());
+  const [tasks, setTasks] = useState<TaskItem[]>(() => getTasks());
   const [highlightedCollection, setHighlightedCollection] = useState<{ type: 'lloyds' | 'generic' | 'access'; id: string } | null>(null);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isBackupReminderOpen, setIsBackupReminderOpen] = useState(false);
@@ -182,6 +193,11 @@ const App: React.FC = () => {
   const persistAccessItems = useCallback((nextItems: AccessCollectionItem[]) => {
     setAccessItems(nextItems);
     saveAccessCollectionItems(nextItems);
+  }, []);
+
+  const persistTasks = useCallback((nextTasks: TaskItem[]) => {
+    setTasks(nextTasks);
+    saveTasks(nextTasks);
   }, []);
 
   // --- Persistence ---
@@ -576,6 +592,7 @@ const App: React.FC = () => {
     setLloydsItems(getLloydsCollectionItems());
     setGenericItems(getGenericCollectionItems());
     setAccessItems(getAccessCollectionItems());
+    setTasks(getTasks());
   }, [storageSyncVersion]);
 
   useEffect(() => {
@@ -974,6 +991,17 @@ const App: React.FC = () => {
             <Briefcase className="w-5 h-5" />
             מעקב גבייה – אקסס
           </button>
+          <button
+            onClick={() => setActiveTab('tasks')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'tasks'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <ListTodo className="w-5 h-5" />
+            משימות
+          </button>
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -1129,6 +1157,10 @@ const App: React.FC = () => {
               accessItems={accessItems}
             />
           )}
+
+          {activeTab === 'tasks' && (
+            <TaskManager tasks={tasks} onChange={persistTasks} />
+          )}
         </Suspense>
       </main>
 
@@ -1158,6 +1190,10 @@ const App: React.FC = () => {
           <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 min-w-[70px] ${activeTab === 'summary' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
             <FileText className="w-6 h-6" />
             <span className="text-[10px]">מנהלים</span>
+          </button>
+          <button onClick={() => setActiveTab('tasks')} className={`flex flex-col items-center gap-1 min-w-[80px] ${activeTab === 'tasks' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+            <ListTodo className="w-6 h-6" />
+            <span className="text-[10px]">משימות</span>
           </button>
           <button onClick={() => openTransactionForm()} className="flex flex-col items-center justify-center min-w-[70px]">
             <div className="bg-slate-900 p-3 rounded-full shadow-lg text-[#d4af37] border-2 border-[#d4af37]">
