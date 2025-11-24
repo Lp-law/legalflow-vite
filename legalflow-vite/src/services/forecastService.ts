@@ -111,7 +111,7 @@ export const calculateForecast = ({
 
   // Seasonal adjustment
   const sameMonthKeys = Object.keys(monthlyStats).filter(key => {
-    const [yearStr, monthStr] = key.split('-');
+    const [, monthStr] = key.split('-');
     const monthIndex = Number(monthStr) - 1;
     return monthIndex === startOfMonth.getMonth() && key !== currentMonthKey;
   });

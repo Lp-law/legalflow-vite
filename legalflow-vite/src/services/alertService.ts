@@ -34,8 +34,6 @@ export interface CashflowAlert {
 
 const EXPENSE_GROUPS: TransactionGroup[] = ['operational', 'tax', 'loan', 'personal'];
 
-const formatCurrency = (value: number) => `${Math.round(value).toLocaleString('he-IL')} ₪`;
-
 const getMonthKey = (dateKey: string) => dateKey.slice(0, 7);
 
 const formatMonth = (monthKey: string) => {
