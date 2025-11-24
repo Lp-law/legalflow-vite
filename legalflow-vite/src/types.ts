@@ -71,3 +71,10 @@ export interface GenericCollectionItem extends BaseCollectionItem {
   clientName: string;
   caseName: string;
 }
+
+export interface AccessCollectionItem extends BaseCollectionItem {
+  insuredName: string;
+  caseName: string;
+  totalDeductible: number;
+  outstandingBalance: number;
+}

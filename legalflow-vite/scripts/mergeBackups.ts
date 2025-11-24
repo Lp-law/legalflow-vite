@@ -56,6 +56,21 @@ interface GenericCollectionItem {
   updatedAt?: string;
 }
 
+interface AccessCollectionItem {
+  id?: string;
+  accountNumber?: string;
+  insuredName?: string;
+  caseName?: string;
+  demandDate?: string | null;
+  amount?: number;
+  totalDeductible?: number;
+  outstandingBalance?: number;
+  category?: CollectionCategory;
+  isPaid?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface BackupFile {
   timestamp?: string;
   transactions?: Transaction[];
@@ -65,6 +80,7 @@ interface BackupFile {
   loanOverrides?: LoanOverrides;
   lloydsCollection?: LloydsCollectionItem[];
   genericCollection?: GenericCollectionItem[];
+  accessCollection?: AccessCollectionItem[];
 }
 
 const BACKUP_DIR = path.resolve(process.cwd(), 'backups');
@@ -264,6 +280,11 @@ const main = async () => {
     mobileBackup.genericCollection
   );
 
+  const mergedAccess = mergeCollectionItems(
+    desktopBackup.accessCollection,
+    mobileBackup.accessCollection
+  );
+
   const mergedBackup: BackupFile = {
     timestamp: new Date().toISOString(),
     transactions: mergedTransactions,
@@ -273,13 +294,14 @@ const main = async () => {
     loanOverrides: mergedLoanOverrides,
     lloydsCollection: mergedLloyds,
     genericCollection: mergedGeneric,
+    accessCollection: mergedAccess,
   };
 
   await fs.mkdir(BACKUP_DIR, { recursive: true });
   await fs.writeFile(MERGED_FILE, JSON.stringify(mergedBackup, null, 2), 'utf8');
 
   console.log(
-    `✅ backup_merged_legalflow.json created with ${mergedTransactions.length} transactions, ${mergedLloyds.length} Lloyds rows, ${mergedGeneric.length} generic rows.`
+    `✅ backup_merged_legalflow.json created with ${mergedTransactions.length} transactions, ${mergedLloyds.length} Lloyds rows, ${mergedGeneric.length} generic rows, ${mergedAccess.length} access rows.`
   );
 };
 

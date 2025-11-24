@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type AlertTrackerType = 'lloyds' | 'generic';
+export type AlertTrackerType = 'lloyds' | 'generic' | 'access';
 
 export interface OverdueAlertEntry {
   id: string;
@@ -22,6 +22,7 @@ interface OverdueAlertsPanelProps {
 const trackerLabel: Record<AlertTrackerType, string> = {
   lloyds: 'מעקב גבייה – לוידס',
   generic: 'מעקב גבייה – לקוחות שונים',
+  access: 'מעקב גבייה – אקסס',
 };
 
 const OverdueAlertsPanel: React.FC<OverdueAlertsPanelProps> = ({ isOpen, onClose, entries, onNavigate }) => {

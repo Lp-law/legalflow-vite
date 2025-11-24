@@ -1,4 +1,4 @@
-import type { Transaction, Category, LloydsCollectionItem, GenericCollectionItem } from '../types';
+import type { Transaction, Category, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_LEGALFLOW_API_URL || '').replace(/\/$/, '');
 
@@ -72,6 +72,7 @@ export interface CloudSnapshot {
   loanOverrides: Record<string, number>;
   lloydsCollection?: LloydsCollectionItem[];
   genericCollection?: GenericCollectionItem[];
+  accessCollection?: AccessCollectionItem[];
   updatedAt: string;
 }
 

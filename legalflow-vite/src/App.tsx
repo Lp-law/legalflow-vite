@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
 import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, Bell } from 'lucide-react';
-import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem } from './types';
+import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem } from './types';
 import {
   getTransactions,
   saveTransactions,
@@ -22,6 +22,9 @@ import {
   getGenericCollectionItems,
   saveGenericCollectionItems,
   replaceGenericCollectionItems,
+  getAccessCollectionItems,
+  saveAccessCollectionItems,
+  replaceAccessCollectionItems,
   STORAGE_EVENT,
 } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
@@ -41,6 +44,7 @@ const CollectionTracker = lazy(() => import('./components/CollectionTracker'));
 const ExecutiveSummary = lazy(() => import('./components/ExecutiveSummary'));
 const LloydsCollectionTracker = lazy(() => import('./components/LloydsCollectionTracker'));
 const GenericCollectionTracker = lazy(() => import('./components/GenericCollectionTracker'));
+const AccessCollectionTracker = lazy(() => import('./components/AccessCollectionTracker'));
 
 const CASHFLOW_CUTOFF = parseDateKey('2025-11-01');
 const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
@@ -96,7 +100,7 @@ const App: React.FC = () => {
   
   // Updated tabs
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'flow' | 'collection' | 'summary' | 'collectionLloyds' | 'collectionGeneric'
+    'dashboard' | 'flow' | 'collection' | 'summary' | 'collectionLloyds' | 'collectionGeneric' | 'collectionAccess'
   >('flow');
 
   // Form initial state helpers
@@ -119,7 +123,8 @@ const App: React.FC = () => {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [lloydsItems, setLloydsItems] = useState<LloydsCollectionItem[]>(() => getLloydsCollectionItems());
   const [genericItems, setGenericItems] = useState<GenericCollectionItem[]>(() => getGenericCollectionItems());
-  const [highlightedCollection, setHighlightedCollection] = useState<{ type: 'lloyds' | 'generic'; id: string } | null>(null);
+  const [accessItems, setAccessItems] = useState<AccessCollectionItem[]>(() => getAccessCollectionItems());
+  const [highlightedCollection, setHighlightedCollection] = useState<{ type: 'lloyds' | 'generic' | 'access'; id: string } | null>(null);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const clearSession = useCallback(() => {
     setCurrentUser(null);
@@ -148,6 +153,11 @@ const App: React.FC = () => {
   const persistGenericItems = useCallback((nextItems: GenericCollectionItem[]) => {
     setGenericItems(nextItems);
     saveGenericCollectionItems(nextItems);
+  }, []);
+
+  const persistAccessItems = useCallback((nextItems: AccessCollectionItem[]) => {
+    setAccessItems(nextItems);
+    saveAccessCollectionItems(nextItems);
   }, []);
 
   // --- Persistence ---
@@ -411,8 +421,10 @@ const App: React.FC = () => {
         replaceLoanOverrides(snapshot.loanOverrides ?? {});
         const snapshotLloyds = replaceLloydsCollectionItems(snapshot.lloydsCollection ?? []);
         const snapshotGeneric = replaceGenericCollectionItems(snapshot.genericCollection ?? []);
+        const snapshotAccess = replaceAccessCollectionItems(snapshot.accessCollection ?? []);
         setLloydsItems(snapshotLloyds);
         setGenericItems(snapshotGeneric);
+        setAccessItems(snapshotAccess);
         setInitialBalance(
           typeof snapshot.initialBalance === 'number'
             ? snapshot.initialBalance
@@ -452,9 +464,10 @@ const App: React.FC = () => {
       loanOverrides: getLoanOverrides(),
       lloydsCollection: lloydsItems,
       genericCollection: genericItems,
+      accessCollection: accessItems,
       updatedAt: new Date().toISOString(),
     };
-  }, [transactions, initialBalance, lloydsItems, genericItems]);
+  }, [transactions, initialBalance, lloydsItems, genericItems, accessItems]);
 
   const performCloudSync = useCallback(async () => {
     if (!currentUser || !authToken || isRestoringFromCloud.current) {
@@ -510,6 +523,7 @@ const App: React.FC = () => {
   useEffect(() => {
     setLloydsItems(getLloydsCollectionItems());
     setGenericItems(getGenericCollectionItems());
+    setAccessItems(getAccessCollectionItems());
   }, [storageSyncVersion]);
 
   useEffect(() => {
@@ -556,6 +570,7 @@ const App: React.FC = () => {
         loanOverrides?: unknown;
         lloydsCollection?: unknown;
         genericCollection?: unknown;
+        accessCollection?: unknown;
       };
 
       if (!Array.isArray(backup.transactions)) {
@@ -589,6 +604,11 @@ const App: React.FC = () => {
       if (backup.genericCollection) {
         const sanitized = replaceGenericCollectionItems(backup.genericCollection);
         setGenericItems(sanitized);
+      }
+
+      if (backup.accessCollection) {
+        const sanitized = replaceAccessCollectionItems(backup.accessCollection);
+        setAccessItems(sanitized);
       }
 
       return;
@@ -647,9 +667,12 @@ const App: React.FC = () => {
       if (entry.tracker === 'lloyds') {
         setActiveTab('collectionLloyds');
         setHighlightedCollection({ type: 'lloyds', id: entry.id });
-      } else {
+      } else if (entry.tracker === 'generic') {
         setActiveTab('collectionGeneric');
         setHighlightedCollection({ type: 'generic', id: entry.id });
+      } else {
+        setActiveTab('collectionAccess');
+        setHighlightedCollection({ type: 'access', id: entry.id });
       }
     },
     []
@@ -696,10 +719,25 @@ const App: React.FC = () => {
         });
       }
     });
+    accessItems.forEach(item => {
+      const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
+      if (overdueDays !== null) {
+        entries.push({
+          id: item.id,
+          tracker: 'access',
+          accountNumber: item.accountNumber,
+          name: item.insuredName || item.caseName || 'ללא שם',
+          demandDate: item.demandDate,
+          amount: item.amount,
+          overdueDays,
+        });
+      }
+    });
     return entries.sort((a, b) => b.overdueDays - a.overdueDays);
-  }, [lloydsItems, genericItems]);
+  }, [lloydsItems, genericItems, accessItems]);
   const lloydsHighlightId = highlightedCollection?.type === 'lloyds' ? highlightedCollection.id : null;
   const genericHighlightId = highlightedCollection?.type === 'generic' ? highlightedCollection.id : null;
+  const accessHighlightId = highlightedCollection?.type === 'access' ? highlightedCollection.id : null;
 
   if (!currentUser || !authToken) {
     return (
@@ -824,6 +862,15 @@ const App: React.FC = () => {
           >
             <Briefcase className="w-5 h-5" />
             מעקב גבייה – לקוחות שונים
+          </button>
+          <button 
+            onClick={() => setActiveTab('collectionAccess')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'collectionAccess' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Briefcase className="w-5 h-5" />
+            מעקב גבייה – אקסס
           </button>
         </nav>
 
@@ -1012,6 +1059,15 @@ const App: React.FC = () => {
             />
           )}
 
+          {activeTab === 'collectionAccess' && (
+            <AccessCollectionTracker
+              items={accessItems}
+              onChange={persistAccessItems}
+              highlightedId={accessHighlightId}
+              onClearHighlight={accessHighlightId ? clearHighlight : undefined}
+            />
+          )}
+
           {activeTab === 'summary' && (
               <ExecutiveSummary transactions={transactions} initialBalance={initialBalance} />
           )}
@@ -1036,6 +1092,10 @@ const App: React.FC = () => {
           <button onClick={() => setActiveTab('collectionGeneric')} className={`flex flex-col items-center gap-1 min-w-[130px] ${activeTab === 'collectionGeneric' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
             <Briefcase className="w-6 h-6" />
             <span className="text-[9px] text-center leading-tight">מעקב גבייה – לקוחות שונים</span>
+          </button>
+          <button onClick={() => setActiveTab('collectionAccess')} className={`flex flex-col items-center gap-1 min-w-[120px] ${activeTab === 'collectionAccess' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+            <Briefcase className="w-6 h-6" />
+            <span className="text-[9px] text-center leading-tight">מעקב גבייה – אקסס</span>
           </button>
           <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 min-w-[70px] ${activeTab === 'summary' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
             <FileText className="w-6 h-6" />

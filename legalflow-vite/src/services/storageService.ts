@@ -1,4 +1,4 @@
-import type { Transaction, LloydsCollectionItem, GenericCollectionItem, CollectionCategory } from '../types';
+import type { Transaction, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem, CollectionCategory } from '../types';
 import { INITIAL_TRANSACTIONS, INITIAL_BALANCE, CATEGORIES, INITIAL_CLIENTS } from '../constants';
 
 const STORAGE_KEY_TRANSACTIONS = 'legalflow_transactions_v2';
@@ -8,6 +8,7 @@ const STORAGE_KEY_CLIENTS = 'legalflow_clients_v1';
 const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
 const STORAGE_KEY_LLOYDS_COLLECTION = 'legalflow_lloyds_collection_v1';
 const STORAGE_KEY_GENERIC_COLLECTION = 'legalflow_generic_collection_v1';
+const STORAGE_KEY_ACCESS_COLLECTION = 'legalflow_access_collection_v1';
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 
 const emitStorageChange = (key: string) => {
@@ -57,6 +58,7 @@ const sanitizeTimestamp = (value: unknown, fallback: string): string =>
 
 type LloydsInput = Partial<LloydsCollectionItem> & Record<string, unknown>;
 type GenericInput = Partial<GenericCollectionItem> & Record<string, unknown>;
+type AccessInput = Partial<AccessCollectionItem> & Record<string, unknown>;
 
 const sanitizeLloydsItem = (input: unknown): LloydsCollectionItem | null => {
   if (!input || typeof input !== 'object') {
@@ -110,6 +112,38 @@ const sanitizeGenericItem = (input: unknown): GenericCollectionItem | null => {
     demandDate: sanitizeDateValue(raw.demandDate),
     amount,
     category: sanitizeCollectionCategory(raw.category),
+    isPaid: Boolean(raw.isPaid),
+    createdAt: sanitizeTimestamp(raw.createdAt, now),
+    updatedAt: sanitizeTimestamp(raw.updatedAt, now),
+  };
+};
+
+const sanitizeAccessItem = (input: unknown): AccessCollectionItem | null => {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+  const raw = input as AccessInput;
+  const accountNumber = normalizeText(raw.accountNumber);
+  const insuredName = normalizeText(raw.insuredName);
+  const caseName = normalizeText(raw.caseName);
+  const amount = sanitizeAmount(raw.amount);
+  if (!accountNumber || amount <= 0) {
+    return null;
+  }
+  const totalDeductible = sanitizeAmount(raw.totalDeductible);
+  const outstandingBalance = sanitizeAmount(raw.outstandingBalance);
+  const now = new Date().toISOString();
+
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : generateId(),
+    accountNumber,
+    insuredName,
+    caseName,
+    demandDate: sanitizeDateValue(raw.demandDate),
+    amount,
+    category: sanitizeCollectionCategory(raw.category),
+    totalDeductible,
+    outstandingBalance,
     isPaid: Boolean(raw.isPaid),
     createdAt: sanitizeTimestamp(raw.createdAt, now),
     updatedAt: sanitizeTimestamp(raw.updatedAt, now),
@@ -458,6 +492,22 @@ export const replaceGenericCollectionItems = (nextItems: unknown): GenericCollec
   return sanitized;
 };
 
+export const getAccessCollectionItems = (): AccessCollectionItem[] =>
+  readCollectionItems<AccessCollectionItem>(STORAGE_KEY_ACCESS_COLLECTION, sanitizeAccessItem);
+
+export const saveAccessCollectionItems = (items: AccessCollectionItem[]) => {
+  persistCollectionItems(STORAGE_KEY_ACCESS_COLLECTION, items, 'accessCollection');
+};
+
+export const replaceAccessCollectionItems = (nextItems: unknown): AccessCollectionItem[] => {
+  const source = Array.isArray(nextItems) ? nextItems : [];
+  const sanitized = source
+    .map(item => sanitizeAccessItem(item))
+    .filter((item): item is AccessCollectionItem => Boolean(item));
+  persistCollectionItems(STORAGE_KEY_ACCESS_COLLECTION, sanitized, 'accessCollection');
+  return sanitized;
+};
+
 // --- Backup Logic ---
 
 export const exportBackupJSON = (transactions: Transaction[]) => {
@@ -470,6 +520,7 @@ export const exportBackupJSON = (transactions: Transaction[]) => {
         loanOverrides: getLoanOverrides(),
         lloydsCollection: getLloydsCollectionItems(),
         genericCollection: getGenericCollectionItems(),
+        accessCollection: getAccessCollectionItems(),
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
