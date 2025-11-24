@@ -122,7 +122,7 @@ const App: React.FC = () => {
         const body = encodeURIComponent(
           generateExecutiveSummary('month', transactions)
         );
-        window.location.href = `mailto:lidor@lp-law.co.il,lior@lp-law.co.il?subject=${subject}&body=${body}`;
+        window.location.href = `mailto:lior@lp-law.co.il?subject=${subject}&body=${body}`;
       }
     }, 10_000);
 
@@ -309,7 +309,7 @@ const App: React.FC = () => {
             }`}
           >
             <Briefcase className="w-5 h-5" />
-            מעקב גבייה
+            תשלומים צפויים
           </button>
         </nav>
 
@@ -371,7 +371,7 @@ const App: React.FC = () => {
             <div>
               <h2 className="text-2xl font-bold text-slate-800">
                 {activeTab === 'dashboard' && 'סקירה חודשית'}
-                {activeTab === 'collection' && 'מעקב גבייה'}
+                {activeTab === 'collection' && 'תשלומים צפויים'}
                 {activeTab === 'summary' && 'תקציר מנהלים'}
               </h2>
               <p className="text-slate-500 text-sm mt-1">
@@ -448,7 +448,7 @@ const App: React.FC = () => {
           }`}
         >
           <Briefcase className="w-6 h-6" />
-          <span className="text-[10px]">גבייה</span>
+          <span className="text-[10px]">תשלומים צפויים</span>
         </button>
 
         <button

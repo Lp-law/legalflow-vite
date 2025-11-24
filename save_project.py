@@ -1207,7 +1207,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                 : (status === 'completed' ? 'שולם' : 'תשלום עתידי')}
                         </span>
                         <span className="text-xs text-slate-500">
-                            {type === 'income' && status === 'pending' && 'יופיע בדוח "מעקב גבייה" עד לתשלום'}
+                            {type === 'income' && status === 'pending' && 'יופיע בדוח "תשלומים צפויים" עד לתשלום'}
                         </span>
                     </div>
                 </div>
@@ -1434,7 +1434,7 @@ const App: React.FC = () => {
           if (now.getHours() === 16 && now.getMinutes() === 0 && now.getSeconds() < 10) {
               const subject = `סיכום תזרים יומי - ${now.toLocaleDateString('he-IL')}`;
               const body = encodeURIComponent(generateExecutiveSummary('month', transactions));
-              window.location.href = `mailto:lidor@lp-law.co.il,lior@lp-law.co.il?subject=${subject}&body=${body}`;
+              window.location.href = `mailto:lior@lp-law.co.il?subject=${subject}&body=${body}`;
           }
       }, 10000);
 
@@ -1569,7 +1569,7 @@ const App: React.FC = () => {
             }`}
           >
             <Briefcase className="w-5 h-5" />
-            מעקב גבייה
+            תשלומים צפויים
           </button>
         </nav>
 
@@ -1616,7 +1616,7 @@ const App: React.FC = () => {
             <div>
               <h2 className="text-2xl font-bold text-slate-800">
                 {activeTab === 'dashboard' && 'סקירה חודשית'}
-                {activeTab === 'collection' && 'מעקב גבייה'}
+                {activeTab === 'collection' && 'תשלומים צפויים'}
                 {activeTab === 'summary' && 'תקציר מנהלים'}
               </h2>
               <p className="text-slate-500 text-sm mt-1">
@@ -2287,8 +2287,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     e.preventDefault();
     
     // Hardcoded credentials as requested
-    if ((username.toLowerCase() === 'lior' && password === 'lior123') ||
-        (username.toLowerCase() === 'lidor' && password === 'lidor123')) {
+  if (username.toLowerCase() === 'lior' && password === 'lior123') {
       onLogin(username);
     } else {
       setError('שם משתמש או סיסמה שגויים');
@@ -2702,7 +2701,7 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
         <div className="p-6 border-b border-slate-100 bg-slate-50/50">
           <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-blue-600" />
-            מעקב גבייה (Aging Report)
+            תשלומים צפויים (Aging Report)
           </h3>
           <p className="text-sm text-slate-500 mt-1">
             רשימת דרישות תשלום/חשבונות עסקה פתוחים (שכר טרחה בלבד). שורות אדומות מסמנות פיגור של מעל 30 יום.

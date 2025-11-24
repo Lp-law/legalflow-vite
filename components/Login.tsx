@@ -14,8 +14,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     e.preventDefault();
     
     // Hardcoded credentials as requested
-    if ((username.toLowerCase() === 'lior' && password === 'lior123') ||
-        (username.toLowerCase() === 'lidor' && password === 'lidor123')) {
+    if (username.toLowerCase() === 'lior' && password === 'lior123') {
       onLogin(username);
     } else {
       setError('שם משתמש או סיסמה שגויים');

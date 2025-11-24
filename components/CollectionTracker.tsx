@@ -21,8 +21,8 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
     return transactions
       .filter(
         t =>
-          t.type === 'income' &&
-          t.status === 'pending' &&
+          t.type === 'income' && 
+          t.status === 'pending' && 
           (t.group === 'fee' || isExpenseReimbursement(t))
       )
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -103,13 +103,13 @@ const CollectionTracker: React.FC<CollectionTrackerProps> = ({ transactions, onM
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-blue-600" />
-              מעקב גבייה (Aging Report)
-            </h3>
-            <p className="text-sm text-slate-500 mt-1">
+              תשלומים צפויים (Aging Report)
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">
               רשימת דרישות תשלום פתוחות לשכר טרחה ולהחזרי הוצאות. שורות אדומות מסמנות פיגור של מעל 30 יום.
-            </p>
+          </p>
           </div>
           <button
             onClick={handleExportCollection}
