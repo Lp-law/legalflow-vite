@@ -68,9 +68,6 @@ const trackerLabel: Record<AlertTrackerType, string> = {
   access: 'אקסס',
 };
 
-const formatCurrency = (value: number) =>
-  `₪${value.toLocaleString('he-IL', { maximumFractionDigits: 0 })}`;
-
 const getMonthKey = (date: string) => date.slice(0, 7);
 
 const formatMonth = (monthKey: string) => {
