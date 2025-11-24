@@ -43,6 +43,8 @@ import SystemToolsToolbar from './components/SystemToolsToolbar';
 import ClientInsightPanel from './components/ClientInsightPanel';
 import type { ClientInsightTarget } from './components/ClientInsightPanel';
 import { calculateForecast } from './services/forecastService';
+import { buildDailyWhatsappSummary } from './services/cfoAssistantService';
+import DailyWhatsappSummaryModal from './components/DailyWhatsappSummaryModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -152,8 +154,18 @@ const App: React.FC = () => {
   });
   const [logoutWarning, setLogoutWarning] = useState<string | null>(null);
   const [clientInsightTarget, setClientInsightTarget] = useState<ClientInsightTarget | null>(null);
+  const [isDailyWhatsappModalOpen, setIsDailyWhatsappModalOpen] = useState(false);
+  const [dailyWhatsappSummary, setDailyWhatsappSummary] = useState('');
   const handleOpenClientInsight = useCallback((target: ClientInsightTarget) => {
     setClientInsightTarget(target);
+  }, []);
+  const handleOpenDailyWhatsappSummary = useCallback(() => {
+    const summary = buildDailyWhatsappSummary(transactions, initialBalance, new Date());
+    setDailyWhatsappSummary(summary);
+    setIsDailyWhatsappModalOpen(true);
+  }, [transactions, initialBalance]);
+  const handleCloseDailyWhatsappSummary = useCallback(() => {
+    setIsDailyWhatsappModalOpen(false);
   }, []);
 
   const clearSession = useCallback(() => {
@@ -1189,6 +1201,7 @@ const App: React.FC = () => {
               lloydsItems={lloydsItems}
               genericItems={genericItems}
               accessItems={accessItems}
+              onRequestDailyWhatsappSummary={handleOpenDailyWhatsappSummary}
             />
           )}
 
@@ -1198,6 +1211,11 @@ const App: React.FC = () => {
           </div>
         </Suspense>
       </main>
+      <DailyWhatsappSummaryModal
+        isOpen={isDailyWhatsappModalOpen}
+        onClose={handleCloseDailyWhatsappSummary}
+        summaryText={dailyWhatsappSummary}
+      />
 
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#050b18]/95 border-t border-white/10 p-3 z-30 safe-area-pb backdrop-blur">

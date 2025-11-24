@@ -7,7 +7,7 @@ import type {
 } from '../types';
 import { generateExecutiveSummary } from '../services/reportService';
 import { exportToCSV } from '../services/exportService';
-import { FileText, Copy, Check, Sparkles, Download, PieChart } from 'lucide-react';
+import { FileText, Copy, Check, Sparkles, Download, PieChart, MessageCircle } from 'lucide-react';
 import ExecutiveSegmentsPanel from './ExecutiveSegmentsPanel';
 
 interface ExecutiveSummaryProps {
@@ -16,6 +16,7 @@ interface ExecutiveSummaryProps {
   lloydsItems: LloydsCollectionItem[];
   genericItems: GenericCollectionItem[];
   accessItems: AccessCollectionItem[];
+  onRequestDailyWhatsappSummary: () => void;
 }
 
 const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
@@ -24,6 +25,7 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   lloydsItems,
   genericItems,
   accessItems,
+  onRequestDailyWhatsappSummary,
 }) => {
   const [reportText, setReportText] = useState<string>('');
   const [currentPeriod, setCurrentPeriod] = useState<'month' | 'quarter' | 'year' | null>(null);
@@ -60,9 +62,21 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto text-slate-100">
-      <div className="text-center space-y-2">
-        <h2 className="text-3xl font-bold text-white">תקציר מנהלים</h2>
-        <p className="text-slate-300">בחר את טווח הזמן הרצוי לקבלת דוח מילולי מקיף על מצב המשרד</p>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="text-center sm:text-right space-y-2">
+          <h2 className="text-3xl font-bold text-white">תקציר מנהלים</h2>
+          <p className="text-slate-300">
+            בחר את טווח הזמן הרצוי לקבלת דוח מילולי מקיף על מצב המשרד
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRequestDailyWhatsappSummary}
+          className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-[#25d366] text-slate-900 font-semibold shadow-lg hover:brightness-110 transition-colors"
+        >
+          <MessageCircle className="w-5 h-5" />
+          תקציר יומי ל-WhatsApp
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
