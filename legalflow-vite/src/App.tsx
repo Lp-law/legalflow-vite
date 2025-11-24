@@ -827,37 +827,56 @@ const App: React.FC = () => {
           </button>
         </nav>
 
-        <div className="p-4 border-t border-slate-800 space-y-4">
-          <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className={`w-2.5 h-2.5 rounded-full ${syncColorClass}`}></span>
-                <div className="text-xs">
-                  <div className="font-bold text-white">{syncLabel}</div>
-                  <div className="text-slate-400 text-[11px]">{lastSyncText}</div>
-                </div>
-              </div>
+        <div className="p-4 border-t border-slate-800 space-y-3 text-right">
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-slate-400 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${syncColorClass}`}></span>
+                <span className="font-semibold text-slate-100">{syncLabel}</span>
+              </span>
               <button
                 onClick={handleManualSync}
                 disabled={syncStatus === 'syncing'}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+                className={`text-[11px] font-semibold ${
                   syncStatus === 'syncing'
-                    ? 'border-slate-600 text-slate-500 cursor-not-allowed'
-                    : 'border-slate-500 text-white hover:bg-slate-700'
+                    ? 'text-slate-600 cursor-not-allowed'
+                    : 'text-slate-300 hover:text-white'
                 }`}
               >
                 סנכרון עכשיו
               </button>
             </div>
+            <div className="text-[11px] text-slate-500">{lastSyncText}</div>
             {syncError && (
-              <div className="text-[11px] text-red-200 bg-red-500/10 border border-red-400/30 px-3 py-1.5 rounded-lg">
-                {syncError}
-              </div>
+              <div className="text-[11px] text-red-200">{syncError}</div>
             )}
+          </div>
+          <div>
+            <div className="text-xs text-slate-500 mb-1">תחזוקת מערכת</div>
+            <div className="space-y-1">
+              <button
+                onClick={handleImportButtonClick}
+                className="w-full text-right text-sm py-1 px-2 rounded hover:bg-slate-700 transition"
+              >
+                ייבוא גיבוי
+              </button>
+              <button
+                onClick={() => exportBackupJSON(transactions)}
+                className="w-full text-right text-sm py-1 px-2 rounded hover:bg-slate-700 transition"
+              >
+                ייצוא גיבוי
+              </button>
+              <button
+                onClick={() => setIsBalanceModalOpen(true)}
+                className="w-full text-right text-sm py-1 px-2 rounded hover:bg-slate-700 transition"
+              >
+                עדכון יתרת פתיחה
+              </button>
+            </div>
           </div>
           <button
             onClick={() => setIsAlertsOpen(true)}
-            className="w-full flex items-center justify-between gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
+            className="w-full flex items-center justify-between gap-2 px-2 py-1 text-sm rounded hover:bg-slate-700 transition"
           >
             <span className="flex items-center gap-2">
               <Bell className="w-4 h-4" />
@@ -869,31 +888,12 @@ const App: React.FC = () => {
               </span>
             )}
           </button>
-          <button
-            onClick={handleImportButtonClick}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
-          >
-            <Upload className="w-4 h-4" />
-            ייבוא גיבוי
-          </button>
-          <button
-            onClick={() => exportBackupJSON(transactions)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
-          >
-            ייצוא גיבוי
-          </button>
-          <button
-            onClick={() => setIsBalanceModalOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
-          >
-            עדכון יתרת פתיחה
-          </button>
           {importFeedback && (
             <div
-              className={`hidden md:block text-xs px-3 py-2 rounded-lg border ${
+              className={`hidden md:block text-xs px-2 py-1 rounded border ${
                 importFeedback.type === 'success'
-                  ? 'border-emerald-300 text-emerald-200 bg-emerald-500/10'
-                  : 'border-red-300 text-red-200 bg-red-500/10'
+                  ? 'border-emerald-300 text-emerald-200'
+                  : 'border-red-300 text-red-200'
               }`}
             >
               {importFeedback.message}
