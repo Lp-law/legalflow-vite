@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 /**
  * One-off merge/clean script for LegalFlow backup JSON files.
  * It reconciles desktop (source-of-truth) and mobile backups into a single
@@ -25,6 +27,34 @@ type CustomCategory = {
 };
 
 type LoanOverrides = Record<string, number>;
+type CollectionCategory = 'expenses' | 'legal_fee';
+
+interface LloydsCollectionItem {
+  id?: string;
+  accountNumber?: string;
+  claimantName?: string;
+  insuredName?: string;
+  syndicate?: string;
+  demandDate?: string | null;
+  amount?: number;
+  category?: CollectionCategory;
+  isPaid?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface GenericCollectionItem {
+  id?: string;
+  accountNumber?: string;
+  clientName?: string;
+  caseName?: string;
+  demandDate?: string | null;
+  amount?: number;
+  category?: CollectionCategory;
+  isPaid?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 interface BackupFile {
   timestamp?: string;
@@ -33,6 +63,8 @@ interface BackupFile {
   customCategories?: CustomCategory[];
   initialBalance?: number;
   loanOverrides?: LoanOverrides;
+  lloydsCollection?: LloydsCollectionItem[];
+  genericCollection?: GenericCollectionItem[];
 }
 
 const BACKUP_DIR = path.resolve(process.cwd(), 'backups');
@@ -174,6 +206,28 @@ const mergeLoanOverrides = (
   ...desktop,
 });
 
+const mergeCollectionItems = <T extends { id?: string }>(
+  desktop: T[] = [],
+  mobile: T[] = []
+): T[] => {
+  if (!desktop.length && !mobile.length) {
+    return [];
+  }
+
+  const byId = new Map<string, T>();
+  mobile.forEach(item => {
+    if (item && item.id) {
+      byId.set(item.id, item);
+    }
+  });
+  desktop.forEach(item => {
+    if (item && item.id) {
+      byId.set(item.id, item);
+    }
+  });
+  return Array.from(byId.values());
+};
+
 const main = async () => {
   const [desktopBackup, mobileBackup] = await Promise.all([
     readBackup(DESKTOP_FILE),
@@ -200,6 +254,16 @@ const main = async () => {
     mobileBackup.loanOverrides
   );
 
+  const mergedLloyds = mergeCollectionItems(
+    desktopBackup.lloydsCollection,
+    mobileBackup.lloydsCollection
+  );
+
+  const mergedGeneric = mergeCollectionItems(
+    desktopBackup.genericCollection,
+    mobileBackup.genericCollection
+  );
+
   const mergedBackup: BackupFile = {
     timestamp: new Date().toISOString(),
     transactions: mergedTransactions,
@@ -207,13 +271,15 @@ const main = async () => {
     customCategories: mergedCategories,
     initialBalance: desktopBackup.initialBalance,
     loanOverrides: mergedLoanOverrides,
+    lloydsCollection: mergedLloyds,
+    genericCollection: mergedGeneric,
   };
 
   await fs.mkdir(BACKUP_DIR, { recursive: true });
   await fs.writeFile(MERGED_FILE, JSON.stringify(mergedBackup, null, 2), 'utf8');
 
   console.log(
-    `✅ backup_merged_legalflow.json created with ${mergedTransactions.length} transactions.`
+    `✅ backup_merged_legalflow.json created with ${mergedTransactions.length} transactions, ${mergedLloyds.length} Lloyds rows, ${mergedGeneric.length} generic rows.`
   );
 };
 

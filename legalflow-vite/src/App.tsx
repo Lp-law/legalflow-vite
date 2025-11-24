@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Upload, Menu } from 'lucide-react';
-import type { Transaction, TransactionGroup } from './types';
+import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
+import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Upload, Menu, Bell } from 'lucide-react';
+import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem } from './types';
 import {
   getTransactions,
   saveTransactions,
@@ -16,6 +16,12 @@ import {
   getCustomCategories,
   getLoanOverrides,
   replaceLoanOverrides,
+  getLloydsCollectionItems,
+  saveLloydsCollectionItems,
+  replaceLloydsCollectionItems,
+  getGenericCollectionItems,
+  saveGenericCollectionItems,
+  replaceGenericCollectionItems,
   STORAGE_EVENT,
 } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
@@ -25,11 +31,16 @@ import Logo from './components/Logo';
 import Login from './components/Login';
 import { fetchCloudSnapshot, persistCloudSnapshot, UnauthorizedError } from './services/cloudService';
 import { formatDateKey, parseDateKey } from './utils/date';
+import { calculateOverdueDays } from './utils/collectionStatus';
+import OverdueAlertsPanel from './components/OverdueAlertsPanel';
+import type { OverdueAlertEntry } from './components/OverdueAlertsPanel';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const CollectionTracker = lazy(() => import('./components/CollectionTracker'));
 const ExecutiveSummary = lazy(() => import('./components/ExecutiveSummary'));
+const LloydsCollectionTracker = lazy(() => import('./components/LloydsCollectionTracker'));
+const GenericCollectionTracker = lazy(() => import('./components/GenericCollectionTracker'));
 
 const CASHFLOW_CUTOFF = parseDateKey('2025-11-01');
 const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
@@ -84,7 +95,9 @@ const App: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   
   // Updated tabs
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'flow' | 'collection' | 'summary'>('flow');
+  const [activeTab, setActiveTab] = useState<
+    'dashboard' | 'flow' | 'collection' | 'summary' | 'collectionLloyds' | 'collectionGeneric'
+  >('flow');
 
   // Form initial state helpers
   const [formInitialDate, setFormInitialDate] = useState<string | undefined>(undefined);
@@ -104,6 +117,10 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
   const [lastSyncIso, setLastSyncIso] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [lloydsItems, setLloydsItems] = useState<LloydsCollectionItem[]>(() => getLloydsCollectionItems());
+  const [genericItems, setGenericItems] = useState<GenericCollectionItem[]>(() => getGenericCollectionItems());
+  const [highlightedCollection, setHighlightedCollection] = useState<{ type: 'lloyds' | 'generic'; id: string } | null>(null);
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const clearSession = useCallback(() => {
     setCurrentUser(null);
     setAuthToken(null);
@@ -121,6 +138,16 @@ const App: React.FC = () => {
     setIsBootstrapping(true);
     setBootstrapError(null);
     setCloudBootstrapVersion(prev => prev + 1);
+  }, []);
+
+  const persistLloydsItems = useCallback((nextItems: LloydsCollectionItem[]) => {
+    setLloydsItems(nextItems);
+    saveLloydsCollectionItems(nextItems);
+  }, []);
+
+  const persistGenericItems = useCallback((nextItems: GenericCollectionItem[]) => {
+    setGenericItems(nextItems);
+    saveGenericCollectionItems(nextItems);
   }, []);
 
   // --- Persistence ---
@@ -382,6 +409,10 @@ const App: React.FC = () => {
         replaceClients(snapshot.clients ?? []);
         replaceCustomCategories(snapshot.customCategories ?? []);
         replaceLoanOverrides(snapshot.loanOverrides ?? {});
+        const snapshotLloyds = replaceLloydsCollectionItems(snapshot.lloydsCollection ?? []);
+        const snapshotGeneric = replaceGenericCollectionItems(snapshot.genericCollection ?? []);
+        setLloydsItems(snapshotLloyds);
+        setGenericItems(snapshotGeneric);
         setInitialBalance(
           typeof snapshot.initialBalance === 'number'
             ? snapshot.initialBalance
@@ -419,9 +450,11 @@ const App: React.FC = () => {
       clients: getClients(),
       customCategories: getCustomCategories(),
       loanOverrides: getLoanOverrides(),
+      lloydsCollection: lloydsItems,
+      genericCollection: genericItems,
       updatedAt: new Date().toISOString(),
     };
-  }, [transactions, initialBalance]);
+  }, [transactions, initialBalance, lloydsItems, genericItems]);
 
   const performCloudSync = useCallback(async () => {
     if (!currentUser || !authToken || isRestoringFromCloud.current) {
@@ -459,11 +492,25 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser || !authToken || isRestoringFromCloud.current) return;
     performCloudSync();
-  }, [transactions, initialBalance, currentUser, authToken, storageSyncVersion, performCloudSync]);
+  }, [
+    transactions,
+    initialBalance,
+    lloydsItems,
+    genericItems,
+    currentUser,
+    authToken,
+    storageSyncVersion,
+    performCloudSync,
+  ]);
 
   useEffect(() => {
     setBalanceDraft(initialBalance.toString());
   }, [initialBalance]);
+
+  useEffect(() => {
+    setLloydsItems(getLloydsCollectionItems());
+    setGenericItems(getGenericCollectionItems());
+  }, [storageSyncVersion]);
 
   useEffect(() => {
     if (!importFeedback) return;
@@ -507,6 +554,8 @@ const App: React.FC = () => {
         clients?: unknown;
         customCategories?: unknown;
         loanOverrides?: unknown;
+        lloydsCollection?: unknown;
+        genericCollection?: unknown;
       };
 
       if (!Array.isArray(backup.transactions)) {
@@ -530,6 +579,16 @@ const App: React.FC = () => {
 
       if (backup.loanOverrides && typeof backup.loanOverrides === 'object') {
         replaceLoanOverrides(backup.loanOverrides);
+      }
+
+      if (backup.lloydsCollection) {
+        const sanitized = replaceLloydsCollectionItems(backup.lloydsCollection);
+        setLloydsItems(sanitized);
+      }
+
+      if (backup.genericCollection) {
+        const sanitized = replaceGenericCollectionItems(backup.genericCollection);
+        setGenericItems(sanitized);
       }
 
       return;
@@ -582,6 +641,24 @@ const App: React.FC = () => {
     setIsMobileActionsOpen(false);
   };
 
+  const handleAlertNavigate = useCallback(
+    (entry: OverdueAlertEntry) => {
+      setIsAlertsOpen(false);
+      if (entry.tracker === 'lloyds') {
+        setActiveTab('collectionLloyds');
+        setHighlightedCollection({ type: 'lloyds', id: entry.id });
+      } else {
+        setActiveTab('collectionGeneric');
+        setHighlightedCollection({ type: 'generic', id: entry.id });
+      }
+    },
+    []
+  );
+
+  const clearHighlight = useCallback(() => {
+    setHighlightedCollection(null);
+  }, []);
+
   const syncColorClass =
     syncStatus === 'syncing' ? 'bg-amber-400' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500';
   const syncLabel =
@@ -589,6 +666,40 @@ const App: React.FC = () => {
   const lastSyncText = lastSyncIso
     ? `עודכן ${new Date(lastSyncIso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`
     : 'טרם בוצע סנכרון';
+  const overdueEntries = useMemo<OverdueAlertEntry[]>(() => {
+    const entries: OverdueAlertEntry[] = [];
+    lloydsItems.forEach(item => {
+      const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
+      if (overdueDays !== null) {
+        entries.push({
+          id: item.id,
+          tracker: 'lloyds',
+          accountNumber: item.accountNumber,
+          name: item.claimantName || item.insuredName || 'ללא שם',
+          demandDate: item.demandDate,
+          amount: item.amount,
+          overdueDays,
+        });
+      }
+    });
+    genericItems.forEach(item => {
+      const overdueDays = calculateOverdueDays(item.demandDate, item.isPaid);
+      if (overdueDays !== null) {
+        entries.push({
+          id: item.id,
+          tracker: 'generic',
+          accountNumber: item.accountNumber,
+          name: item.clientName || item.caseName || 'ללא שם',
+          demandDate: item.demandDate,
+          amount: item.amount,
+          overdueDays,
+        });
+      }
+    });
+    return entries.sort((a, b) => b.overdueDays - a.overdueDays);
+  }, [lloydsItems, genericItems]);
+  const lloydsHighlightId = highlightedCollection?.type === 'lloyds' ? highlightedCollection.id : null;
+  const genericHighlightId = highlightedCollection?.type === 'generic' ? highlightedCollection.id : null;
 
   if (!currentUser || !authToken) {
     return (
@@ -696,6 +807,24 @@ const App: React.FC = () => {
             <Briefcase className="w-5 h-5" />
             תשלומים צפויים
           </button>
+          <button 
+            onClick={() => setActiveTab('collectionLloyds')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'collectionLloyds' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Briefcase className="w-5 h-5" />
+            מעקב גבייה – לוידס
+          </button>
+          <button 
+            onClick={() => setActiveTab('collectionGeneric')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'collectionGeneric' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Briefcase className="w-5 h-5" />
+            מעקב גבייה – לקוחות שונים
+          </button>
         </nav>
 
         <div className="p-4 border-t border-slate-800 space-y-4">
@@ -726,6 +855,20 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
+          <button
+            onClick={() => setIsAlertsOpen(true)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
+          >
+            <span className="flex items-center gap-2">
+              <Bell className="w-4 h-4" />
+              התראות
+            </span>
+            {overdueEntries.length > 0 && (
+              <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
+                {overdueEntries.length}
+              </span>
+            )}
+          </button>
           <button
             onClick={handleImportButtonClick}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-200 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors text-sm border border-slate-700"
@@ -810,6 +953,8 @@ const App: React.FC = () => {
               <h2 className="text-2xl font-bold text-slate-800">
                 {activeTab === 'dashboard' && 'סקירה חודשית'}
                 {activeTab === 'collection' && 'תשלומים צפויים'}
+                {activeTab === 'collectionLloyds' && 'מעקב גבייה – לוידס'}
+                {activeTab === 'collectionGeneric' && 'מעקב גבייה – לקוחות שונים'}
                 {activeTab === 'summary' && 'תקציר מנהלים'}
               </h2>
               <p className="text-slate-500 text-sm mt-1">
@@ -849,6 +994,24 @@ const App: React.FC = () => {
               />
           )}
 
+          {activeTab === 'collectionLloyds' && (
+            <LloydsCollectionTracker
+              items={lloydsItems}
+              onChange={persistLloydsItems}
+              highlightedId={lloydsHighlightId}
+              onClearHighlight={lloydsHighlightId ? clearHighlight : undefined}
+            />
+          )}
+
+          {activeTab === 'collectionGeneric' && (
+            <GenericCollectionTracker
+              items={genericItems}
+              onChange={persistGenericItems}
+              highlightedId={genericHighlightId}
+              onClearHighlight={genericHighlightId ? clearHighlight : undefined}
+            />
+          )}
+
           {activeTab === 'summary' && (
               <ExecutiveSummary transactions={transactions} initialBalance={initialBalance} />
           )}
@@ -856,24 +1019,35 @@ const App: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 safe-area-pb">
-        <button onClick={() => setActiveTab('flow')} className={`flex flex-col items-center gap-1 ${activeTab === 'flow' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
-          <Table2 className="w-6 h-6" />
-          <span className="text-[10px]">תזרים</span>
-        </button>
-        <button onClick={() => setActiveTab('collection')} className={`flex flex-col items-center gap-1 ${activeTab === 'collection' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
-          <Briefcase className="w-6 h-6" />
-          <span className="text-[10px]">גבייה</span>
-        </button>
-        <button onClick={() => openTransactionForm()} className="flex flex-col items-center justify-center -mt-8">
-          <div className="bg-slate-900 p-3 rounded-full shadow-lg text-[#d4af37] border-2 border-[#d4af37]">
-            <Plus className="w-6 h-6" />
-          </div>
-        </button>
-        <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 ${activeTab === 'summary' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
-          <FileText className="w-6 h-6" />
-          <span className="text-[10px]">מנהלים</span>
-        </button>
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 z-30 safe-area-pb">
+        <div className="flex items-center gap-3 overflow-x-auto">
+          <button onClick={() => setActiveTab('flow')} className={`flex flex-col items-center gap-1 min-w-[70px] ${activeTab === 'flow' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+            <Table2 className="w-6 h-6" />
+            <span className="text-[10px]">תזרים</span>
+          </button>
+          <button onClick={() => setActiveTab('collection')} className={`flex flex-col items-center gap-1 min-w-[90px] ${activeTab === 'collection' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+            <Briefcase className="w-6 h-6" />
+            <span className="text-[10px] text-center leading-tight">תשלומים צפויים</span>
+          </button>
+          <button onClick={() => setActiveTab('collectionLloyds')} className={`flex flex-col items-center gap-1 min-w-[120px] ${activeTab === 'collectionLloyds' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+            <Briefcase className="w-6 h-6" />
+            <span className="text-[9px] text-center leading-tight">מעקב גבייה – לוידס</span>
+          </button>
+          <button onClick={() => setActiveTab('collectionGeneric')} className={`flex flex-col items-center gap-1 min-w-[130px] ${activeTab === 'collectionGeneric' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+            <Briefcase className="w-6 h-6" />
+            <span className="text-[9px] text-center leading-tight">מעקב גבייה – לקוחות שונים</span>
+          </button>
+          <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 min-w-[70px] ${activeTab === 'summary' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+            <FileText className="w-6 h-6" />
+            <span className="text-[10px]">מנהלים</span>
+          </button>
+          <button onClick={() => openTransactionForm()} className="flex flex-col items-center justify-center min-w-[70px]">
+            <div className="bg-slate-900 p-3 rounded-full shadow-lg text-[#d4af37] border-2 border-[#d4af37]">
+              <Plus className="w-6 h-6" />
+            </div>
+            <span className="text-[10px] mt-1 text-slate-600">תנועה</span>
+          </button>
+        </div>
       </div>
 
       <TransactionForm 
@@ -910,6 +1084,20 @@ const App: React.FC = () => {
                 }`}
               >
                 {syncStatus === 'syncing' ? 'מסנכרן...' : 'סנכרון עכשיו'}
+              </button>
+              <button
+                onClick={() => {
+                  setIsAlertsOpen(true);
+                  setIsMobileActionsOpen(false);
+                }}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between"
+              >
+                <span>התראות</span>
+                {overdueEntries.length > 0 && (
+                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
+                    {overdueEntries.length}
+                  </span>
+                )}
               </button>
               <button
                 onClick={handleMobileImportClick}
@@ -1002,6 +1190,13 @@ const App: React.FC = () => {
         accept="application/json"
         className="hidden"
         onChange={handleBackupFileChange}
+      />
+
+      <OverdueAlertsPanel
+        isOpen={isAlertsOpen}
+        onClose={() => setIsAlertsOpen(false)}
+        entries={overdueEntries}
+        onNavigate={handleAlertNavigate}
       />
 
     </div>

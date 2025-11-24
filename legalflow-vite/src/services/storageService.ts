@@ -1,4 +1,4 @@
-import type { Transaction } from '../types';
+import type { Transaction, LloydsCollectionItem, GenericCollectionItem, CollectionCategory } from '../types';
 import { INITIAL_TRANSACTIONS, INITIAL_BALANCE, CATEGORIES, INITIAL_CLIENTS } from '../constants';
 
 const STORAGE_KEY_TRANSACTIONS = 'legalflow_transactions_v2';
@@ -6,6 +6,8 @@ const STORAGE_KEY_INITIAL_BALANCE = 'legalflow_initial_balance_v2';
 const STORAGE_KEY_CUSTOM_CATEGORIES = 'legalflow_custom_categories_v2';
 const STORAGE_KEY_CLIENTS = 'legalflow_clients_v1';
 const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
+const STORAGE_KEY_LLOYDS_COLLECTION = 'legalflow_lloyds_collection_v1';
+const STORAGE_KEY_GENERIC_COLLECTION = 'legalflow_generic_collection_v1';
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 
 const emitStorageChange = (key: string) => {
@@ -22,6 +24,128 @@ const emitStorageChange = (key: string) => {
 const LEGACY_LOAN_CATEGORY_NAMES = new Set(['מימון ישיר', 'פועלים', 'משכנתא']);
 const LEGACY_CLIENT_NAME = 'טרם';
 const REQUIRED_TEREM_CLIENTS = ['טרם ריטיינר', 'טרם שעתי'];
+
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `id_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+};
+
+const sanitizeDateValue = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+};
+
+const normalizeText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+const sanitizeCollectionCategory = (value: unknown): CollectionCategory =>
+  value === 'expenses' ? 'expenses' : 'legal_fee';
+
+const sanitizeAmount = (value: unknown): number => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 0;
+  }
+  return Number(Math.abs(numeric).toFixed(2));
+};
+
+const sanitizeTimestamp = (value: unknown, fallback: string): string =>
+  typeof value === 'string' && value ? value : fallback;
+
+type LloydsInput = Partial<LloydsCollectionItem> & Record<string, unknown>;
+type GenericInput = Partial<GenericCollectionItem> & Record<string, unknown>;
+
+const sanitizeLloydsItem = (input: unknown): LloydsCollectionItem | null => {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+  const raw = input as LloydsInput;
+  const accountNumber = normalizeText(raw.accountNumber);
+  const claimantName = normalizeText(raw.claimantName);
+  const insuredName = normalizeText(raw.insuredName);
+  const syndicate = normalizeText(raw.syndicate);
+  const amount = sanitizeAmount(raw.amount);
+  if (!accountNumber || amount <= 0) {
+    return null;
+  }
+  const now = new Date().toISOString();
+
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : generateId(),
+    accountNumber,
+    claimantName,
+    insuredName,
+    syndicate,
+    demandDate: sanitizeDateValue(raw.demandDate),
+    amount,
+    category: sanitizeCollectionCategory(raw.category),
+    isPaid: Boolean(raw.isPaid),
+    createdAt: sanitizeTimestamp(raw.createdAt, now),
+    updatedAt: sanitizeTimestamp(raw.updatedAt, now),
+  };
+};
+
+const sanitizeGenericItem = (input: unknown): GenericCollectionItem | null => {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+  const raw = input as GenericInput;
+  const accountNumber = normalizeText(raw.accountNumber);
+  const clientName = normalizeText(raw.clientName);
+  const caseName = normalizeText(raw.caseName);
+  const amount = sanitizeAmount(raw.amount);
+  if (!accountNumber || amount <= 0) {
+    return null;
+  }
+  const now = new Date().toISOString();
+
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : generateId(),
+    accountNumber,
+    clientName,
+    caseName,
+    demandDate: sanitizeDateValue(raw.demandDate),
+    amount,
+    category: sanitizeCollectionCategory(raw.category),
+    isPaid: Boolean(raw.isPaid),
+    createdAt: sanitizeTimestamp(raw.createdAt, now),
+    updatedAt: sanitizeTimestamp(raw.updatedAt, now),
+  };
+};
+
+const readCollectionItems = <T>(
+  storageKey: string,
+  sanitizer: (entry: unknown) => T | null
+): T[] => {
+  const stored = localStorage.getItem(storageKey);
+  if (!stored) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    const sanitized = parsed
+      .map(entry => sanitizer(entry))
+      .filter((entry): entry is T => Boolean(entry));
+    if (sanitized.length !== parsed.length) {
+      localStorage.setItem(storageKey, JSON.stringify(sanitized));
+    }
+    return sanitized;
+  } catch {
+    return [];
+  }
+};
+
+const persistCollectionItems = <T>(storageKey: string, entries: T[], eventKey: string) => {
+  localStorage.setItem(storageKey, JSON.stringify(entries));
+  emitStorageChange(eventKey);
+};
 
 export const getTransactions = (): Transaction[] => {
   const stored = localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
@@ -300,6 +424,40 @@ export const replaceClients = (nextClients: unknown) => {
   emitStorageChange('clients');
 };
 
+// --- Collection Trackers ---
+
+export const getLloydsCollectionItems = (): LloydsCollectionItem[] =>
+  readCollectionItems<LloydsCollectionItem>(STORAGE_KEY_LLOYDS_COLLECTION, sanitizeLloydsItem);
+
+export const saveLloydsCollectionItems = (items: LloydsCollectionItem[]) => {
+  persistCollectionItems(STORAGE_KEY_LLOYDS_COLLECTION, items, 'lloydsCollection');
+};
+
+export const replaceLloydsCollectionItems = (nextItems: unknown): LloydsCollectionItem[] => {
+  const source = Array.isArray(nextItems) ? nextItems : [];
+  const sanitized = source
+    .map(item => sanitizeLloydsItem(item))
+    .filter((item): item is LloydsCollectionItem => Boolean(item));
+  persistCollectionItems(STORAGE_KEY_LLOYDS_COLLECTION, sanitized, 'lloydsCollection');
+  return sanitized;
+};
+
+export const getGenericCollectionItems = (): GenericCollectionItem[] =>
+  readCollectionItems<GenericCollectionItem>(STORAGE_KEY_GENERIC_COLLECTION, sanitizeGenericItem);
+
+export const saveGenericCollectionItems = (items: GenericCollectionItem[]) => {
+  persistCollectionItems(STORAGE_KEY_GENERIC_COLLECTION, items, 'genericCollection');
+};
+
+export const replaceGenericCollectionItems = (nextItems: unknown): GenericCollectionItem[] => {
+  const source = Array.isArray(nextItems) ? nextItems : [];
+  const sanitized = source
+    .map(item => sanitizeGenericItem(item))
+    .filter((item): item is GenericCollectionItem => Boolean(item));
+  persistCollectionItems(STORAGE_KEY_GENERIC_COLLECTION, sanitized, 'genericCollection');
+  return sanitized;
+};
+
 // --- Backup Logic ---
 
 export const exportBackupJSON = (transactions: Transaction[]) => {
@@ -309,7 +467,9 @@ export const exportBackupJSON = (transactions: Transaction[]) => {
         clients: getClients(),
         customCategories: getCustomCategories(),
         initialBalance: getInitialBalance(),
-        loanOverrides: getLoanOverrides()
+        loanOverrides: getLoanOverrides(),
+        lloydsCollection: getLloydsCollectionItems(),
+        genericCollection: getGenericCollectionItems(),
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

@@ -47,3 +47,27 @@ export interface Category {
   defaultAmount?: number; // Optional default amount for auto-fill
   defaultDay?: number;    // Optional default day of month (1-31)
 }
+
+export type CollectionCategory = 'expenses' | 'legal_fee';
+
+export interface BaseCollectionItem {
+  id: string;
+  accountNumber: string;
+  demandDate: string | null;
+  amount: number;
+  category: CollectionCategory;
+  isPaid: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LloydsCollectionItem extends BaseCollectionItem {
+  claimantName: string;
+  insuredName: string;
+  syndicate: string;
+}
+
+export interface GenericCollectionItem extends BaseCollectionItem {
+  clientName: string;
+  caseName: string;
+}
