@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, ListTodo } from 'lucide-react';
+import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, ListTodo, HelpCircle } from 'lucide-react';
 import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem, TaskItem } from './types';
 import {
   getTransactions,
@@ -46,6 +46,7 @@ import { buildDailyWhatsappSummary } from './services/cfoAssistantService';
 import DailyWhatsappSummaryModal from './components/DailyWhatsappSummaryModal';
 import AdvancedAlertsPanel from './components/AdvancedAlertsPanel';
 import { buildAdvancedAlerts } from './services/alertService';
+import HelpCenterModal from './components/HelpCenterModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -157,6 +158,7 @@ const App: React.FC = () => {
   const [clientInsightTarget, setClientInsightTarget] = useState<ClientInsightTarget | null>(null);
   const [isDailyWhatsappModalOpen, setIsDailyWhatsappModalOpen] = useState(false);
   const [dailyWhatsappSummary, setDailyWhatsappSummary] = useState('');
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const handleOpenClientInsight = useCallback((target: ClientInsightTarget) => {
     setClientInsightTarget(target);
   }, []);
@@ -1116,7 +1118,16 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="md:mr-64 p-6 min-h-screen pb-24 md:pb-6">
-        <div className="flex justify-end mb-4">
+        <div className="flex flex-wrap items-center justify-end gap-3 mb-4">
+          <button
+            onClick={() => setIsHelpOpen(true)}
+            title="עזרה / שאלות נפוצות"
+            aria-label="עזרה / שאלות נפוצות"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl border border-white/10 text-slate-200 hover:text-white hover:border-white/30 transition-colors"
+          >
+            <HelpCircle className="w-4 h-4" />
+            <span className="text-base leading-none">?</span>
+          </button>
           <button
             onClick={handleBackNavigation}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl border border-white/10 text-slate-200 hover:text-white hover:border-white/30 transition-colors uppercase"
@@ -1248,6 +1259,7 @@ const App: React.FC = () => {
         onClose={handleCloseDailyWhatsappSummary}
         summaryText={dailyWhatsappSummary}
       />
+      <HelpCenterModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
 
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#050b18]/95 border-t border-white/10 p-3 z-30 safe-area-pb backdrop-blur">
