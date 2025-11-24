@@ -12,6 +12,7 @@ import { addTotals, normalize } from '../utils/cashflow';
 import type { CashflowRow } from '../utils/cashflow';
 import { formatDateKey, parseDateKey } from '../utils/date';
 import FeeSummaryModal from './FeeSummaryModal';
+import ChartBuilder from './ChartBuilder';
 import { analyzeCashflow, generateAlerts, type InsightAlert } from '../services/insightService';
 
 interface DashboardProps {
@@ -239,6 +240,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     const net = monthEndBalance - monthStartBalance;
     return { income: incomeTotal, expenses: expenseTotal, net };
   }, [monthEndBalance, monthStartBalance, incomeTotal, expenseTotal]);
+
+  const [isChartBuilderOpen, setIsChartBuilderOpen] = useState(false);
 
   const chartData = useMemo(() => {
     if (cashflowRows.length === 0) {
@@ -561,11 +564,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Trend Chart */}
         <div className="lg:col-span-2 law-card">
-          <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 gap-4">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Activity className="w-5 h-5 text-blue-300" />
               מגמת יתרה יומית
             </h3>
+          <div className="flex items-center gap-3">
             <button 
               onClick={handleExportDashboard}
               className="flex items-center gap-1 text-sm text-[var(--law-gold)] hover:text-white font-semibold"
@@ -573,6 +577,13 @@ const Dashboard: React.FC<DashboardProps> = ({
               <Download className="w-4 h-4" />
               ייצוא אקסל
             </button>
+            <button
+              onClick={() => setIsChartBuilderOpen(true)}
+              className="inline-flex items-center gap-1 text-sm font-semibold text-[#25d366] hover:text-[#1ebe5c]"
+            >
+              Custom Chart
+            </button>
+          </div>
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -666,6 +677,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         isOpen={isFeeSummaryOpen}
         onClose={() => setIsFeeSummaryOpen(false)}
         transactions={transactions}
+      />
+      <ChartBuilder
+        transactions={transactions}
+        isOpen={isChartBuilderOpen}
+        onClose={() => setIsChartBuilderOpen(false)}
       />
     </div>
   );
