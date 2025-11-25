@@ -21,8 +21,6 @@ interface DashboardProps {
   forecastResult: ForecastResult;
 }
 
-const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
-
 const Dashboard: React.FC<DashboardProps> = ({
   transactions,
   initialBalance,
@@ -274,9 +272,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const expensesByCategory = useMemo(() => {
     const data: Record<string, number> = {};
     monthTransactions.forEach(t => {
-      if (t.group === 'loan' && parseDateKey(t.date) >= LOAN_FREEZE_CUTOFF) {
-        return;
-      }
       if (t.type === 'expense') {
         data[t.category] = (data[t.category] || 0) + t.amount;
       }

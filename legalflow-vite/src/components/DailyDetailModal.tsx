@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Trash2, Plus, Pencil } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
+import { lightInputCompactClasses } from './ui/inputStyles';
 
 interface DailyDetailModalProps {
   isOpen: boolean;
@@ -177,7 +178,7 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
                             type="number"
                             value={taxDraft}
                             onChange={(e) => setTaxDraft(e.target.value)}
-                            className="w-28 px-2 py-1 border border-slate-200 rounded text-sm"
+                            className={`w-28 ${lightInputCompactClasses}`}
                             min="0"
                             step="0.01"
                           />
@@ -234,7 +235,7 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                className="w-28 px-2 py-1 border border-slate-200 rounded text-sm"
+                                className={`w-28 ${lightInputCompactClasses}`}
                                 value={loanDraft}
                                 onChange={(e) => setLoanDraft(e.target.value)}
                               />

@@ -96,7 +96,27 @@ const emitStorageChange = (key: string) => {
     })
   );
 };
-const LEGACY_LOAN_CATEGORY_NAMES = new Set(['מימון ישיר', 'פועלים', 'משכנתא']);
+export const LOAN_CATEGORY_NORMALIZATION_MAP: Record<string, string> = {
+  'החזר הלוואה מימון ישיר': 'החזר הלוואה מימון ישיר',
+  'החזר הלוואה פועלים': 'החזר הלוואה פועלים',
+  'החזר משכנתא': 'החזר משכנתא',
+  'מימון ישיר': 'החזר הלוואה מימון ישיר',
+  'פועלים': 'החזר הלוואה פועלים',
+  'משכנתא': 'החזר משכנתא',
+};
+export const normalizeLoanCategoryName = (category?: string | null): string | null => {
+  if (typeof category !== 'string') {
+    return null;
+  }
+  const trimmed = category.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return LOAN_CATEGORY_NORMALIZATION_MAP[trimmed] ?? null;
+};
+
+export const isLoanCategoryLabel = (category?: string | null): boolean =>
+  Boolean(normalizeLoanCategoryName(category));
 const LEGACY_CLIENT_NAME = 'טרם';
 const REQUIRED_TEREM_CLIENTS = ['טרם ריטיינר', 'טרם שעתי'];
 
@@ -281,6 +301,60 @@ const persistCollectionItems = <T>(storageKey: string, entries: T[], eventKey: s
   emitStorageChange(eventKey);
 };
 
+const logLoanMigration = (message: string, transaction: Transaction) => {
+  if (typeof console === 'undefined') {
+    return;
+  }
+  console.warn('[LoanMigration]', message, {
+    id: transaction.id,
+    date: transaction.date,
+    category: transaction.category,
+    group: transaction.group,
+  });
+};
+
+const runLoanMigrations = (transactions: Transaction[]): { cleaned: Transaction[]; didMutate: boolean } => {
+  let didMutate = false;
+  const cleaned = transactions.map(entry => {
+    if (!entry || typeof entry !== 'object') {
+      return entry as Transaction;
+    }
+    const transaction = entry as Transaction;
+    const canonicalCategory = normalizeLoanCategoryName(
+      typeof transaction.category === 'string' ? transaction.category : ''
+    );
+
+    if (!canonicalCategory) {
+      return transaction;
+    }
+
+    let next = transaction;
+    const trimmedCategory =
+      typeof transaction.category === 'string' ? transaction.category.trim() : transaction.category;
+
+    if (canonicalCategory !== trimmedCategory) {
+      next = next === transaction ? { ...transaction } : next;
+      next.category = canonicalCategory;
+      didMutate = true;
+      logLoanMigration(`Renamed legacy loan category "${trimmedCategory}" -> "${canonicalCategory}"`, next);
+    }
+
+    if (transaction.group !== 'loan') {
+      next = next === transaction ? { ...transaction } : next;
+      next.group = 'loan';
+      didMutate = true;
+      logLoanMigration(
+        `Updated transaction group to 'loan' for canonical loan category "${canonicalCategory}"`,
+        next
+      );
+    }
+
+    return next;
+  }) as Transaction[];
+
+  return { cleaned, didMutate };
+};
+
 export const getTransactions = (): Transaction[] => {
   const stored = localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
   if (!stored) {
@@ -298,19 +372,10 @@ export const getTransactions = (): Transaction[] => {
     return INITIAL_TRANSACTIONS;
   }
 
-  const cleaned = parsed.filter(transaction => {
-    if (!transaction || typeof transaction !== 'object') {
-      return true;
-    }
-    const group = (transaction as { group?: string }).group;
-    const category = (transaction as { category?: string }).category;
-    if (group === 'loan' && typeof category === 'string' && LEGACY_LOAN_CATEGORY_NAMES.has(category)) {
-      return false;
-    }
-    return true;
-  }) as Transaction[];
+  const transactions = parsed as Transaction[];
+  const { cleaned, didMutate } = runLoanMigrations(transactions);
 
-  if (cleaned.length !== parsed.length) {
+  if (didMutate) {
     localStorage.setItem(STORAGE_KEY_TRANSACTIONS, JSON.stringify(cleaned));
   }
 

@@ -5,6 +5,7 @@ import { getAllCategories, saveCustomCategory, getClients, saveClient } from '..
 import type { Transaction, TransactionGroup } from '../types';
 import { formatDateKey } from '../utils/date';
 import { suggestCategoryForTransaction, type CategorySuggestion } from '../services/insightService';
+import { lightInputBaseClasses, lightInputCompactClasses } from './ui/inputStyles';
 
 interface TransactionFormProps {
   isOpen: boolean;
@@ -450,12 +451,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <label className="block text-sm font-medium text-slate-700 mb-1">קטגוריה</label>
                     {isAddingCategory ? (
                         <div className="flex gap-2">
-                            <input 
+                                <input 
                                 type="text" 
                                 value={newCategoryName}
                                 onChange={(e) => setNewCategoryName(e.target.value)}
                                 placeholder="הקלד שם קטגוריה חדשה..."
-                                className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                                className={lightInputBaseClasses}
                                 autoFocus
                             />
                             <button 
@@ -480,7 +481,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                     applyCategoryDefaults(nextValue);
                                 }
                             }}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className={lightInputBaseClasses}
                         >
                             <option value="" disabled>בחר קטגוריה</option>
                             {filteredCategories.map(cat => (
@@ -514,7 +515,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             value={newClientName}
                             onChange={(e) => setNewClientName(e.target.value)}
                             placeholder="הקלד שם לקוח חדש..."
-                            className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                            className={lightInputBaseClasses}
                             autoFocus
                         />
                         <button 
@@ -537,7 +538,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                 setDescription(e.target.value);
                             }
                         }}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className={lightInputBaseClasses}
                     >
                         <option value="" disabled>בחר לקוח</option>
                         {availableClients.map((client, idx) => (
@@ -553,7 +554,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     placeholder="תיאור ההוצאה"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={lightInputBaseClasses}
                 />
               )}
             </div>
@@ -570,7 +571,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 const month = e.target.value.padStart(2, '0');
                 setLoanEndMonth(`${currentYear}-${month}`);
               }}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className={lightInputBaseClasses}
             >
               {Array.from({ length: 12 }, (_, i) => {
                 const value = (i + 1).toString().padStart(2, '0');
@@ -589,7 +590,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 const [, currentMonth] = (loanEndMonth || `${date.slice(0, 4)}-${date.slice(5, 7)}`).split('-');
                 setLoanEndMonth(`${year}-${currentMonth}`);
               }}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className={lightInputBaseClasses}
             >
               {Array.from({ length: 26 }, (_, idx) => {
                 const baseYear = new Date().getFullYear();
@@ -616,7 +617,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   type="text"
                   value={clientReference}
                   onChange={(e) => setClientReference(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={lightInputBaseClasses}
                 />
               </div>
               <div>
@@ -624,7 +625,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className={lightInputBaseClasses}
                 >
                   {PAYMENT_METHODS.map(m => (
                     <option key={m.value} value={m.value}>{m.label}</option>
@@ -675,7 +676,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                 max="60" 
                                 value={recurringMonths}
                                 onChange={(e) => setRecurringMonths(parseInt(e.target.value))}
-                                className="w-16 px-2 py-1 text-sm border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-center"
+                                className={`w-16 ${lightInputCompactClasses} text-center`}
                              />
                              <span className="text-sm text-blue-700">חודשים</span>
                          </div>

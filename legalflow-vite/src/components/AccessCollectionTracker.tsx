@@ -1,8 +1,75 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { AccessCollectionItem, CollectionCategory } from '../types';
 import { calculateOverdueDays, formatOverdueLabel } from '../utils/collectionStatus';
 import { AlertTriangle } from 'lucide-react';
 import type { ClientInsightTarget } from './ClientInsightPanel';
+import * as XLSX from 'xlsx';
+import { formatDateKey } from '../utils/date';
+
+const ACCESS_REQUIRED_HEADERS: readonly string[] = [
+  'מספר חשבון עסקה',
+  'שם מבוטח',
+  'שם תובע',
+  'סכום',
+  'מועד דרישה',
+] as const;
+
+const normalizeHebrewString = (value: unknown) =>
+  typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
+
+const parseNumericCell = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Number(value.toFixed(2)) : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.replace(/,/g, '').trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : null;
+  }
+  return null;
+};
+
+const normalizeExcelDate = (value: unknown): string | null => {
+  if (value == null || value === '') {
+    return null;
+  }
+  if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (!parsed) return null;
+    const jsDate = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+    return formatDateKey(jsDate);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parts = trimmed.split(/[\/\-.]/);
+    if (parts.length === 3) {
+      const [part1, part2, part3] = parts.map(part => part.trim());
+      const dayFirst = Number(part1.length === 4 ? part3 : part1);
+      const monthMiddle = Number(part2);
+      const yearSegment = part3.length === 4 ? Number(part3) : Number(part3.length === 2 ? `20${part3}` : part3);
+      const actualYear = part1.length === 4 ? Number(part1) : yearSegment;
+      const actualDay = part1.length === 4 ? Number(part3) : dayFirst;
+      if (
+        Number.isFinite(actualYear) &&
+        Number.isFinite(monthMiddle) &&
+        Number.isFinite(actualDay) &&
+        actualYear > 1900
+      ) {
+        const jsDate = new Date(actualYear, monthMiddle - 1, actualDay);
+        if (!Number.isNaN(jsDate.getTime())) {
+          return formatDateKey(jsDate);
+        }
+      }
+    }
+    const fallback = new Date(trimmed);
+    if (!Number.isNaN(fallback.getTime())) {
+      return formatDateKey(fallback);
+    }
+  }
+  return null;
+};
 
 const CATEGORY_LABELS: Record<CollectionCategory, string> = {
   expenses: 'הוצאות',
@@ -53,6 +120,15 @@ const AccessCollectionTracker: React.FC<AccessCollectionTrackerProps> = ({
   const [editError, setEditError] = useState('');
   const [showAddAmountPanel, setShowAddAmountPanel] = useState(true);
   const [showEditAmountPanel, setShowEditAmountPanel] = useState(true);
+  const [importFeedback, setImportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!importFeedback) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setImportFeedback(null), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [importFeedback]);
 
   useEffect(() => {
     if (!highlightedId || typeof document === 'undefined') return;
@@ -246,8 +322,113 @@ const AccessCollectionTracker: React.FC<AccessCollectionTrackerProps> = ({
     </div>
   );
 
+  const handleImportFile = async (file: File) => {
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      if (!workbook.SheetNames.length) {
+        throw new Error('הקובץ לא מכיל גיליונות נתונים.');
+      }
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(worksheet, { header: 1 });
+      if (!rows.length) {
+        throw new Error('הקובץ ריק או שאינו בפורמט נתמך.');
+      }
+      const headerRow = rows[0].map(cell => normalizeHebrewString(cell));
+      const isHeaderValid =
+        headerRow.length >= ACCESS_REQUIRED_HEADERS.length &&
+        ACCESS_REQUIRED_HEADERS.every((header, index) => headerRow[index] === header);
+      if (!isHeaderValid) {
+        throw new Error('כותרות הקובץ אינן תואמות את הפורמט הנדרש.');
+      }
+
+      const now = new Date().toISOString();
+      const existingKeys = new Set(items.map(item => `${item.accountNumber.trim()}__${item.demandDate ?? ''}`));
+      const imported: AccessCollectionItem[] = [];
+      let skipped = 0;
+
+      rows.slice(1).forEach(row => {
+        const [accountCell, insuredCell, caseCell, amountCell, dateCell] = row;
+        const accountNumber = normalizeHebrewString(accountCell);
+        if (!accountNumber) {
+          skipped += 1;
+          return;
+        }
+        const amountValue = parseNumericCell(amountCell);
+        if (amountValue === null || !Number.isFinite(amountValue) || amountValue <= 0) {
+          skipped += 1;
+          return;
+        }
+        const demandDate = normalizeExcelDate(dateCell);
+        const duplicateKey = `${accountNumber}__${demandDate ?? ''}`;
+        if (existingKeys.has(duplicateKey)) {
+          skipped += 1;
+          return;
+        }
+        const nextItem: AccessCollectionItem = {
+          id: crypto.randomUUID(),
+          accountNumber,
+          insuredName: normalizeHebrewString(insuredCell),
+          caseName: normalizeHebrewString(caseCell),
+          demandDate,
+          amount: amountValue,
+          totalDeductible: 0,
+          outstandingBalance: amountValue,
+          category: 'legal_fee',
+          isPaid: false,
+          createdAt: now,
+          updatedAt: now,
+        };
+        imported.push(nextItem);
+        existingKeys.add(duplicateKey);
+      });
+
+      if (!imported.length) {
+        setImportFeedback({
+          type: 'error',
+          message: skipped
+            ? 'כל השורות בקובץ נדחו (כפילויות או נתונים חסרים).'
+            : 'הקובץ לא הכיל שורות לייבוא.',
+        });
+        return;
+      }
+
+      onChange([...items, ...imported]);
+      setImportFeedback({
+        type: 'success',
+        message: `ייבוא הסתיים: נוספו ${imported.length} רשומות${skipped ? `, דילגנו על ${skipped} שורות` : ''}.`,
+      });
+    } catch (error) {
+      console.error('Access import failed', error);
+      const message =
+        error instanceof Error ? error.message : 'אירעה שגיאה בעת קריאת הקובץ. ודא שהקובץ בפורמט התקין.';
+      setImportFeedback({ type: 'error', message });
+    }
+  };
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    handleImportFile(file).finally(() => {
+      event.target.value = '';
+    });
+  };
+
   return (
     <div className="space-y-6" dir="rtl">
+      {importFeedback && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
+            importFeedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          {importFeedback.message}
+        </div>
+      )}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
         <div>
           <h2 className="text-xl font-bold text-slate-800">הוספת דרישת גבייה – אקסס</h2>
@@ -324,13 +505,22 @@ const AccessCollectionTracker: React.FC<AccessCollectionTrackerProps> = ({
           </div>
         </div>
         {formError && <p className="text-sm text-red-600">{formError}</p>}
-        <div className="flex justify-end">
-          <button
-            onClick={handleAdd}
-            className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow hover:bg-slate-800"
-          >
-            הוסף רשומה
-          </button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-6 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              ייבוא מרשימת חייבים (Excel)
+            </button>
+            <button
+              onClick={handleAdd}
+              className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow hover:bg-slate-800"
+            >
+              הוסף רשומה
+            </button>
+          </div>
         </div>
       </div>
 
@@ -551,6 +741,13 @@ const AccessCollectionTracker: React.FC<AccessCollectionTrackerProps> = ({
           </div>
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
     </div>
   );
 };

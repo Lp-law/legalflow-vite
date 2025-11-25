@@ -155,3 +155,35 @@ h6 {
 .law-button-secondary:hover {
   background: rgba(255, 255, 255, 0.08);
 }
+
+.light-input {
+  background-color: #ffffff;
+  color: #0f172a !important;
+  caret-color: #0f172a;
+}
+
+.light-input::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+
+.light-input:disabled {
+  color: #94a3b8 !important;
+}
+
+select.light-input:invalid,
+select.light-input option[value=""] {
+  color: #94a3b8 !important;
+}
+
+select.light-input:valid {
+  color: #0f172a !important;
+}
+
+select.light-input option {
+  color: #0f172a;
+}
+
+.light-input:focus {
+  outline: none;
+}

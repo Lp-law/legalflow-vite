@@ -28,6 +28,7 @@ import {
   getTasks,
   saveTasks,
   STORAGE_EVENT,
+  isLoanCategoryLabel,
 } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
 import { syncTaxTransactions } from './services/taxService';
@@ -56,7 +57,6 @@ const AccessCollectionTracker = lazy(() => import('./components/AccessCollection
 const TaskManager = lazy(() => import('./components/TaskManager'));
 
 const CASHFLOW_CUTOFF = parseDateKey('2025-11-01');
-const LOAN_FREEZE_CUTOFF = parseDateKey('2025-12-01');
 const BACKUP_SESSION_KEY = 'legalflow_backup_done_for_session';
 
 const normalizeTransactionDates = (list: Transaction[]) => {
@@ -72,15 +72,53 @@ const normalizeTransactionDates = (list: Transaction[]) => {
   return { normalized, didNormalize };
 };
 
+const warnOnLoanCategoryMismatches = (list: Transaction[]) => {
+  if (typeof import.meta === 'undefined' || import.meta.env?.MODE !== 'development') {
+    return;
+  }
+  list.forEach(tx => {
+    if (isLoanCategoryLabel(tx.category) && tx.group !== 'loan') {
+      console.warn('[LoanSanitize][DevAssert] Expected loan group for category', {
+        id: tx.id,
+        date: tx.date,
+        category: tx.category,
+        group: tx.group,
+      });
+    }
+  });
+};
+
+/**
+ * Sanitizes transactions without removing future-dated loans.
+ * - Normalizes all date strings to YYYY-MM-DD.
+ * - Drops transactions that are older than CASHFLOW_CUTOFF (with logging).
+ * - Never mutates the group/category of loans; invariants are enforced via storage migrations instead.
+ */
 const sanitizeTransactions = (list: Transaction[]) => {
   const { normalized, didNormalize } = normalizeTransactionDates(list);
-  const cutoffTransactions = normalized
-    .filter(t => parseDateKey(t.date) >= CASHFLOW_CUTOFF)
-    .filter(t => !(t.group === 'loan' && parseDateKey(t.date) >= LOAN_FREEZE_CUTOFF));
+  const dropped: Transaction[] = [];
+  const cutoffTransactions = normalized.filter(t => {
+    const keep = parseDateKey(t.date) >= CASHFLOW_CUTOFF;
+    if (!keep) {
+      dropped.push(t);
+    }
+    return keep;
+  });
+
+  if (dropped.length) {
+    const sample = dropped.slice(0, 3).map(t => t.id ?? t.date);
+    console.warn('[LoanSanitize] Dropped transactions before cutoff', {
+      count: dropped.length,
+      cutoff: formatDateKey(CASHFLOW_CUTOFF),
+      examples: sample,
+    });
+  }
 
   if (cutoffTransactions.length !== list.length || didNormalize) {
     saveTransactions(cutoffTransactions);
   }
+
+  warnOnLoanCategoryMismatches(cutoffTransactions);
 
   return cutoffTransactions;
 };
@@ -320,6 +358,7 @@ const App: React.FC = () => {
     const processedTransactions = newTransactions.map(t => {
       const id = crypto.randomUUID();
       let amount = t.amount;
+      // Transactions created from the Loans column must always remain group === 'loan'.
       if (t.group === 'loan') {
         amount = Math.abs(t.amount);
         rememberLoanOverride(id, amount);
@@ -1450,3 +1489,27 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+/**
+ * Loan persistence fix notes (Dec 2025):
+ * Root cause:
+ *   Legacy storage cleanup renamed/deleted loans that used the older Hebrew labels (“מימון ישיר”, “פועלים”, “משכנתא”)
+ *   and, in some backups, the group was downgraded to “operational”. The sanitize pipeline later removed those rows,
+ *   so loans vanished after refresh/import.
+ * Fix summary:
+ *   - Added a storage migration that normalizes legacy loan category names and forces their group to remain “loan”.
+ *   - Added logging + dev-only assertions whenever loan-like categories are filtered or misclassified.
+ *   - Documented the invariant that transactions spawned from the Loans column must stay group === 'loan'.
+ *
+ * Manual test checklist:
+ * 1. New single loan (future date): add a loan on 2025-12-05 (“החזר הלוואה מימון ישיר”, ₪1,770) and verify it
+ *    appears immediately, survives a full refresh, and keeps group === 'loan' in localStorage.
+ * 2. Recurring loan: add a 12-month recurring loan starting 2025-11-15. Confirm the first entry preserves the chosen
+ *    status, future months are pending, and all entries remain in the Loans column after refresh.
+ * 3. Legacy label migration: add/import a loan whose category is the short form (“מימון ישיר”). Refresh and verify
+ *    it still exists, now normalized to “החזר הלוואה מימון ישיר”, and shows in Monthly Flow + Dashboard.
+ * 4. Backup import: load the provided backup JSON and confirm all historical loans (including legacy names) appear
+ *    under the Loans column with group === 'loan'. Observe the console log entries tagged [LoanMigration].
+ * 5. Regression sweep: verify non-loan transactions (income, taxes, operational, personal, bank adjustments) and
+ *    tax auto-sync still behave as before, and Dashboard analytics continue to render without errors.
+ */
