@@ -318,7 +318,6 @@ const App: React.FC = () => {
     sessionStorage.setItem('legalflow_token', token);
     sessionStorage.removeItem(BACKUP_SESSION_KEY);
     setHasSessionBackup(false);
-    setIsBackupReminderOpen(true);
     setBackupReminderWarning(null);
     setAuthError(null);
   };
@@ -873,15 +872,11 @@ const App: React.FC = () => {
   const genericHighlightId = highlightedCollection?.type === 'generic' ? highlightedCollection.id : null;
   const accessHighlightId = highlightedCollection?.type === 'access' ? highlightedCollection.id : null;
 
-  useEffect(() => {
-    if (currentUser && authToken) {
-      if (!hasSessionBackup) {
-        setIsBackupReminderOpen(true);
-      }
-    } else {
-      setIsBackupReminderOpen(false);
-    }
-  }, [currentUser, authToken, hasSessionBackup]);
+useEffect(() => {
+  if (!currentUser || !authToken) {
+    setIsBackupReminderOpen(false);
+  }
+}, [currentUser, authToken]);
 
   const handleBackupReminderDismiss = () => {
     if (hasSessionBackup) {

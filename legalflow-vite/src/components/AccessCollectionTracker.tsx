@@ -286,37 +286,34 @@ const AccessCollectionTracker: React.FC<AccessCollectionTrackerProps> = ({
       <label className="text-xs font-medium text-slate-600">
         סכום
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
-          min="0"
-          step="0.01"
           value={state.amount}
           onChange={e => onChangeState(prev => ({ ...prev, amount: e.target.value }))}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          placeholder="₪0"
         />
       </label>
       <label className="text-xs font-medium text-slate-600">
         סה"כ השתתפות עצמית
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
-          min="0"
-          step="0.01"
           value={state.totalDeductible}
           onChange={e => onChangeState(prev => ({ ...prev, totalDeductible: e.target.value }))}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          placeholder="₪0"
         />
       </label>
       <label className="text-xs font-medium text-slate-600">
         חוב נוכחי ע"ח ה"ע
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
-          min="0"
-          step="0.01"
           value={state.outstandingBalance}
           onChange={e => onChangeState(prev => ({ ...prev, outstandingBalance: e.target.value }))}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          placeholder="₪0"
         />
       </label>
     </div>
