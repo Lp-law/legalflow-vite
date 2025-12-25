@@ -38,6 +38,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     [today]
   );
 
+  const committedTransactions = useMemo(
+    () => transactions.filter(t => t.status === 'completed'),
+    [transactions]
+  );
+
   const daysInMonth = useMemo(() => {
     const days: Date[] = [];
     const date = new Date(startOfMonth);
@@ -50,15 +55,15 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const monthTransactions = useMemo(
     () =>
-      transactions.filter(t => {
+      committedTransactions.filter(t => {
         const tDate = parseDateKey(t.date);
         return tDate >= startOfMonth && tDate <= endOfMonth;
       }),
-    [transactions, startOfMonth, endOfMonth]
+    [committedTransactions, startOfMonth, endOfMonth]
   );
 
   const monthStartBalance = useMemo(() => {
-    const previousTransactions = transactions.filter(t => {
+    const previousTransactions = committedTransactions.filter(t => {
       const tDate = parseDateKey(t.date);
       return tDate < startOfMonth;
     });
@@ -72,7 +77,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       .reduce((sum, t) => sum + t.amount, 0);
 
     return initialBalance + prevIncome - prevExpense;
-  }, [transactions, startOfMonth, initialBalance]);
+  }, [committedTransactions, startOfMonth, initialBalance]);
 
   const cashflowRows = useMemo(() => {
     const rows: CashflowRow[] = daysInMonth.map(day => ({
@@ -131,12 +136,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   const monthEndBalance = useMemo(
     () =>
       calculateLedgerEndBalance({
-        transactions,
+        transactions: committedTransactions,
         startDate: startOfMonth,
         endDate: endOfMonth,
         openingBalance: initialBalance,
       }),
-    [transactions, startOfMonth, endOfMonth, initialBalance]
+    [committedTransactions, startOfMonth, endOfMonth, initialBalance]
   );
 
   const todaysBalance = useMemo(() => {
@@ -204,6 +209,27 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     );
   }, [cashflowRows]);
+
+  const profitMetrics = useMemo(() => {
+    const initialTotals = {
+      totalIncome: 0,
+      totalNonTaxExpenses: 0,
+      totalTaxExpenses: 0,
+    };
+
+    return monthTransactions.reduce((acc, transaction) => {
+      if (transaction.type === 'income') {
+        acc.totalIncome += transaction.amount;
+      } else if (transaction.type === 'expense') {
+        if (transaction.group === 'tax') {
+          acc.totalTaxExpenses += transaction.amount;
+        } else {
+          acc.totalNonTaxExpenses += transaction.amount;
+        }
+      }
+      return acc;
+    }, initialTotals);
+  }, [monthTransactions]);
 
   const operatingProfit = useMemo(
     () => profitMetrics.totalIncome - profitMetrics.totalNonTaxExpenses,
