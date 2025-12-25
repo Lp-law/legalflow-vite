@@ -8,7 +8,7 @@ import type { ForecastResult } from '../services/forecastService';
 import { CATEGORIES } from '../constants';
 import { TrendingUp, TrendingDown, Wallet, Scale, Activity, Info, Download } from 'lucide-react';
 import { exportToCSV } from '../services/exportService';
-import { addTotals, normalize } from '../utils/cashflow';
+import { addTotals, normalize, calculateLedgerEndBalance } from '../utils/cashflow';
 import type { CashflowRow } from '../utils/cashflow';
 import { formatDateKey, parseDateKey } from '../utils/date';
 import FeeSummaryModal from './FeeSummaryModal';
@@ -128,12 +128,16 @@ const Dashboard: React.FC<DashboardProps> = ({
     return addTotals(rows, monthStartBalance);
   }, [daysInMonth, monthTransactions, monthStartBalance]);
 
-  const monthEndBalance = useMemo(() => {
-    if (cashflowRows.length === 0) {
-      return monthStartBalance;
-    }
-    return cashflowRows[cashflowRows.length - 1].balance ?? monthStartBalance;
-  }, [cashflowRows, monthStartBalance]);
+  const monthEndBalance = useMemo(
+    () =>
+      calculateLedgerEndBalance({
+        transactions,
+        startDate: startOfMonth,
+        endDate: endOfMonth,
+        openingBalance: initialBalance,
+      }),
+    [transactions, startOfMonth, endOfMonth, initialBalance]
+  );
 
   const todaysBalance = useMemo(() => {
     if (cashflowRows.length === 0) {
@@ -200,28 +204,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     );
   }, [cashflowRows]);
-
-  const profitMetrics = useMemo(() => {
-    return monthTransactions.reduce(
-      (acc, transaction) => {
-        if (transaction.type === 'income') {
-          acc.totalIncome += transaction.amount;
-        } else if (transaction.type === 'expense') {
-          if (transaction.group === 'tax') {
-            acc.totalTaxExpenses += transaction.amount;
-          } else {
-            acc.totalNonTaxExpenses += transaction.amount;
-          }
-        }
-        return acc;
-      },
-      {
-        totalIncome: 0,
-        totalNonTaxExpenses: 0,
-        totalTaxExpenses: 0,
-      }
-    );
-  }, [monthTransactions]);
 
   const operatingProfit = useMemo(
     () => profitMetrics.totalIncome - profitMetrics.totalNonTaxExpenses,
@@ -409,11 +391,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <BalanceHeroCard
           title="יתרה צפויה"
-          value={forecastResult.forecast}
+          value={monthEndBalance}
           icon={Scale}
           accentBgClass="bg-gradient-to-br from-amber-900/40 to-amber-500/10"
           accentIconClass="text-amber-300"
-          subtitle={`טווח ביטחון: ₪${forecastResult.confidenceLow.toLocaleString()} - ₪${forecastResult.confidenceHigh.toLocaleString()}`}
+          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
         />
       </div>
 

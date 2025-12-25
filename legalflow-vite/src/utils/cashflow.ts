@@ -1,3 +1,13 @@
+import type { Transaction } from '../types';
+import { formatDateKey, parseDateKey } from './date';
+
+export interface EndOfMonthInput {
+  transactions: Transaction[];
+  startDate: Date;
+  endDate: Date;
+  openingBalance: number;
+}
+
 export type CashflowRow = {
   date: string;
   salary?: number | string | null;
@@ -87,4 +97,106 @@ export const addTotals = (
   rows: CashflowRow[],
   openingBalance = 0
 ): CashflowRow[] => calculateMonthlyTotals(rows, openingBalance);
+
+const buildRowsForRange = (start: Date, end: Date): CashflowRow[] => {
+  const rows: CashflowRow[] = [];
+  const cursor = new Date(start);
+  while (cursor.getTime() <= end.getTime()) {
+    rows.push({
+      date: formatDateKey(cursor),
+      salary: 0,
+      otherIncome: 0,
+      loans: 0,
+      withdrawals: 0,
+      expenses: 0,
+      taxes: 0,
+      bankAdjustments: 0,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return rows;
+};
+
+const applyTransactionToRow = (row: CashflowRow, transaction: Transaction) => {
+  const rawAmount = Number(transaction.amount) || 0;
+  const absoluteAmount = Math.abs(rawAmount);
+  switch (transaction.group) {
+    case 'fee':
+      row.salary = (Number(row.salary) || 0) + absoluteAmount;
+      break;
+    case 'other_income':
+      row.otherIncome = (Number(row.otherIncome) || 0) + absoluteAmount;
+      break;
+    case 'loan':
+      row.loans = (Number(row.loans) || 0) + absoluteAmount;
+      break;
+    case 'personal':
+      row.withdrawals = (Number(row.withdrawals) || 0) + absoluteAmount;
+      break;
+    case 'operational':
+      row.expenses = (Number(row.expenses) || 0) + absoluteAmount;
+      break;
+    case 'tax':
+      row.taxes = (Number(row.taxes) || 0) + absoluteAmount;
+      break;
+    case 'bank_adjustment':
+      row.bankAdjustments = (Number(row.bankAdjustments) || 0) + rawAmount;
+      break;
+    default:
+      break;
+  }
+};
+
+export const buildLedgerMapForRange = ({
+  transactions,
+  startDate,
+  endDate,
+  openingBalance,
+}: EndOfMonthInput): Map<string, CashflowRow> => {
+  let effectiveStart = new Date(startDate);
+  let effectiveEnd = new Date(endDate);
+
+  const normalizedTransactions = transactions.map(transaction => ({
+    ...transaction,
+    date: formatDateKey(parseDateKey(transaction.date)),
+  }));
+
+  if (normalizedTransactions.length) {
+    const sortedDates = normalizedTransactions
+      .map(t => parseDateKey(t.date))
+      .sort((a, b) => a.getTime() - b.getTime());
+    effectiveStart = new Date(
+      Math.min(effectiveStart.getTime(), sortedDates[0].getTime())
+    );
+    effectiveEnd = new Date(
+      Math.max(
+        effectiveEnd.getTime(),
+        sortedDates[sortedDates.length - 1].getTime()
+      )
+    );
+  }
+
+  const rows = buildRowsForRange(effectiveStart, effectiveEnd);
+  const rowMap = new Map<string, CashflowRow>();
+  rows.forEach(row => {
+    rowMap.set(row.date, row);
+  });
+
+  normalizedTransactions.forEach(transaction => {
+    const row = rowMap.get(transaction.date);
+    if (!row) {
+      return;
+    }
+    applyTransactionToRow(row, transaction);
+  });
+
+  const enrichedRows = addTotals(rows, openingBalance);
+  return new Map(enrichedRows.map(row => [row.date, row]));
+};
+
+export const calculateLedgerEndBalance = (input: EndOfMonthInput): number => {
+  const ledgerMap = buildLedgerMapForRange(input);
+  const endRow = ledgerMap.get(formatDateKey(input.endDate));
+  return endRow?.balance ?? input.openingBalance;
+};
 

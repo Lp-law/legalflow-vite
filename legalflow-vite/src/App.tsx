@@ -909,7 +909,6 @@ useEffect(() => {
               onToggleStatus={handleToggleTransactionStatus}
               onUpdateTaxAmount={handleUpdateTaxAmount}
               onUpdateLoanAmount={handleUpdateLoanAmount}
-              forecastResult={forecastResult}
               recentTransactionIds={recentTransactionIds}
               deletingTransactionId={pendingDeletionId}
               systemToolsToolbar={

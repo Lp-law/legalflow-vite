@@ -3,12 +3,10 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, ChevronLeft, Plus, Download } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
-import type { ForecastResult } from '../services/forecastService';
 import DailyDetailModal from './DailyDetailModal';
 import { exportToCSV } from '../services/exportService';
-import { addTotals } from '../utils/cashflow';
-import type { CashflowRow } from '../utils/cashflow';
-import { formatDateKey, parseDateKey } from '../utils/date';
+import { buildLedgerMapForRange } from '../utils/cashflow';
+import { formatDateKey } from '../utils/date';
 
 interface MonthlyFlowProps {
   transactions: Transaction[];
@@ -19,7 +17,6 @@ interface MonthlyFlowProps {
   onToggleStatus: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount: (id: string, amount: number) => void;
   onUpdateLoanAmount: (id: string, amount: number) => void;
-  forecastResult?: ForecastResult;
   systemToolsToolbar?: ReactNode;
   recentTransactionIds?: string[];
   deletingTransactionId?: string | null;
@@ -67,7 +64,6 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   onToggleStatus,
   onUpdateTaxAmount,
   onUpdateLoanAmount,
-  forecastResult,
   recentTransactionIds,
   deletingTransactionId,
   systemToolsToolbar,
@@ -137,96 +133,16 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     return days;
   }, [monthStartDate]);
 
-  const globalCashflowMap = useMemo(() => {
-    const buildRows = (start: Date, end: Date) => {
-      const rows: CashflowRow[] = [];
-      const cursor = new Date(start);
-      while (cursor.getTime() <= end.getTime()) {
-        rows.push({
-          date: formatDateKey(cursor),
-          salary: 0,
-          otherIncome: 0,
-          loans: 0,
-          withdrawals: 0,
-          expenses: 0,
-          taxes: 0,
-          bankAdjustments: 0,
-        });
-        cursor.setDate(cursor.getDate() + 1);
-      }
-      return rows;
-    };
-
-    if (transactions.length === 0) {
-      const rows = buildRows(monthStartDate, monthEndDate);
-      const enriched = addTotals(rows, initialBalance);
-      return new Map(enriched.map(row => [row.date, row]));
-    }
-
-    const normalizedTransactions = transactions.map(t => ({
-      ...t,
-      date: formatDateKey(parseDateKey(t.date)),
-    }));
-
-    const sortedDates = normalizedTransactions
-      .map(t => parseDateKey(t.date))
-      .sort((a, b) => a.getTime() - b.getTime());
-
-    const earliestDate = sortedDates[0] || monthStartDate;
-    const latestDate =
-      sortedDates[sortedDates.length - 1] || monthEndDate;
-
-    const rangeStart = new Date(
-      Math.min(earliestDate.getTime(), monthStartDate.getTime())
-    );
-    const rangeEnd = new Date(
-      Math.max(latestDate.getTime(), monthEndDate.getTime())
-    );
-
-    const rows = buildRows(rangeStart, rangeEnd);
-    const rowMap = rows.reduce<Record<string, CashflowRow>>((acc, row) => {
-      acc[row.date] = row;
-      return acc;
-    }, {});
-
-    normalizedTransactions.forEach(t => {
-      const row = rowMap[t.date];
-      if (!row) return;
-
-      const rawAmount = Number(t.amount) || 0;
-      const absoluteAmount = Math.abs(rawAmount);
-
-      switch (t.group) {
-        case 'fee':
-          row.salary = (Number(row.salary) || 0) + absoluteAmount;
-          break;
-        case 'other_income':
-          row.otherIncome = (Number(row.otherIncome) || 0) + absoluteAmount;
-          break;
-        case 'loan':
-          row.loans = (Number(row.loans) || 0) + absoluteAmount;
-          break;
-        case 'personal':
-          row.withdrawals = (Number(row.withdrawals) || 0) + absoluteAmount;
-          break;
-        case 'operational':
-          row.expenses = (Number(row.expenses) || 0) + absoluteAmount;
-          break;
-        case 'tax':
-          row.taxes = (Number(row.taxes) || 0) + absoluteAmount;
-          break;
-        case 'bank_adjustment':
-          row.bankAdjustments =
-            (Number(row.bankAdjustments) || 0) + rawAmount;
-          break;
-        default:
-          break;
-      }
-    });
-
-    const enriched = addTotals(rows, initialBalance);
-    return new Map(enriched.map(row => [row.date, row]));
-  }, [transactions, monthStartDate, monthEndDate, initialBalance]);
+  const globalCashflowMap = useMemo(
+    () =>
+      buildLedgerMapForRange({
+        transactions,
+        startDate: monthStartDate,
+        endDate: monthEndDate,
+        openingBalance: initialBalance,
+      }),
+    [transactions, monthStartDate, monthEndDate, initialBalance]
+  );
 
   // --- Financial Logic ---
   const monthStartBalance = useMemo(() => {
@@ -465,13 +381,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
       : `יתרה לחודש ${monthLabel}`;
 
   const heroMonthEndBalanceValue = lastDayEntry?.balance ?? monthStartBalance;
-  const heroForecastValue = forecastResult?.forecast ?? heroMonthEndBalanceValue;
   const heroMonthEndSubtitle = `סוף ${formatDate(monthEndDate)}`;
-  const heroForecastSubtitle = forecastResult
-    ? `טווח ביטחון: ${formatCurrency(forecastResult.confidenceLow)} - ${formatCurrency(
-        forecastResult.confidenceHigh
-      )}`
-    : heroMonthEndSubtitle;
 
   const BalanceHeroCard = ({
     title,
@@ -600,8 +510,8 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             />
             <BalanceHeroCard
               title="יתרה צפויה לסוף החודש"
-              value={heroForecastValue}
-              subtitle={heroForecastSubtitle}
+              value={heroMonthEndBalanceValue}
+              subtitle={heroMonthEndSubtitle}
               gradientClass="bg-gradient-to-br from-emerald-600 to-lime-500"
             />
         </div>
