@@ -6,9 +6,9 @@ import {
 import type { Transaction } from '../types';
 import type { ForecastResult } from '../services/forecastService';
 import { CATEGORIES } from '../constants';
-import { TrendingUp, TrendingDown, Wallet, Scale, Activity, Info, Download } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, Scale, Info, Activity, Download } from 'lucide-react';
 import { exportToCSV } from '../services/exportService';
-import { addTotals, normalize, calculateLedgerEndBalance } from '../utils/cashflow';
+import { normalize, buildLedgerMapForRange } from '../utils/cashflow';
 import type { CashflowRow } from '../utils/cashflow';
 import { formatDateKey, parseDateKey } from '../utils/date';
 import FeeSummaryModal from './FeeSummaryModal';
@@ -62,80 +62,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     [committedTransactions, startOfMonth, endOfMonth]
   );
 
-  const monthStartBalance = useMemo(() => {
-    const previousTransactions = committedTransactions.filter(t => {
-      const tDate = parseDateKey(t.date);
-      return tDate < startOfMonth;
-    });
-
-    const prevIncome = previousTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const prevExpense = previousTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    return initialBalance + prevIncome - prevExpense;
-  }, [committedTransactions, startOfMonth, initialBalance]);
-
-  const cashflowRows = useMemo(() => {
-    const rows: CashflowRow[] = daysInMonth.map(day => ({
-      date: formatDateKey(day),
-      salary: 0,
-      otherIncome: 0,
-      loans: 0,
-      withdrawals: 0,
-      expenses: 0,
-      taxes: 0,
-      bankAdjustments: 0,
-    }));
-
-    const rowMap = rows.reduce<Record<string, CashflowRow>>((acc, row) => {
-      acc[row.date] = row;
-      return acc;
-    }, {});
-
-    monthTransactions.forEach(t => {
-      const row = rowMap[t.date];
-      if (!row) return;
-      const rawAmount = Number(t.amount) || 0;
-      const absoluteAmount = Math.abs(rawAmount);
-
-      switch (t.group) {
-        case 'fee':
-          row.salary = (Number(row.salary) || 0) + absoluteAmount;
-          break;
-        case 'other_income':
-          row.otherIncome = (Number(row.otherIncome) || 0) + absoluteAmount;
-          break;
-        case 'loan':
-          row.loans = (Number(row.loans) || 0) + absoluteAmount;
-          break;
-        case 'personal':
-          row.withdrawals = (Number(row.withdrawals) || 0) + absoluteAmount;
-          break;
-        case 'operational':
-          row.expenses = (Number(row.expenses) || 0) + absoluteAmount;
-          break;
-        case 'tax':
-          row.taxes = (Number(row.taxes) || 0) + absoluteAmount;
-          break;
-        case 'bank_adjustment':
-          row.bankAdjustments =
-            (Number(row.bankAdjustments) || 0) + rawAmount;
-          break;
-        default:
-          break;
-      }
-    });
-
-    return addTotals(rows, monthStartBalance);
-  }, [daysInMonth, monthTransactions, monthStartBalance]);
-
-  const monthEndBalance = useMemo(
+  const ledgerMap = useMemo(
     () =>
-      calculateLedgerEndBalance({
+      buildLedgerMapForRange({
         transactions: committedTransactions,
         startDate: startOfMonth,
         endDate: endOfMonth,
@@ -144,20 +73,56 @@ const Dashboard: React.FC<DashboardProps> = ({
     [committedTransactions, startOfMonth, endOfMonth, initialBalance]
   );
 
-  const todaysBalance = useMemo(() => {
-    if (cashflowRows.length === 0) {
-      return monthStartBalance;
-    }
-    let lastKnown = monthStartBalance;
-    for (const row of cashflowRows) {
-      if (row.date <= todayKey) {
-        lastKnown = row.balance ?? lastKnown;
-      } else {
-        break;
+  const previousDayKey = useMemo(() => {
+    const prev = new Date(startOfMonth);
+    prev.setDate(prev.getDate() - 1);
+    return formatDateKey(prev);
+  }, [startOfMonth]);
+
+  const openingBalance = useMemo(() => {
+    const previousRow = ledgerMap.get(previousDayKey);
+    return previousRow?.balance ?? initialBalance;
+  }, [ledgerMap, previousDayKey, initialBalance]);
+
+  const cashflowRows = useMemo(() => {
+    return daysInMonth.map(day => {
+      const dateKey = formatDateKey(day);
+      const ledgerRow = ledgerMap.get(dateKey);
+      if (ledgerRow) {
+        return ledgerRow;
       }
+      return {
+        date: dateKey,
+        salary: 0,
+        otherIncome: 0,
+        loans: 0,
+        withdrawals: 0,
+        expenses: 0,
+        taxes: 0,
+        bankAdjustments: 0,
+        balance: openingBalance,
+      } as CashflowRow;
+    });
+  }, [daysInMonth, ledgerMap, openingBalance]);
+
+  const todaysBalance = useMemo(() => {
+    const todayRow = ledgerMap.get(todayKey);
+    if (todayRow?.balance !== undefined) {
+      return todayRow.balance;
     }
-    return lastKnown;
-  }, [cashflowRows, monthStartBalance, todayKey]);
+    const latestBalance = cashflowRows[cashflowRows.length - 1]?.balance;
+    return latestBalance ?? openingBalance;
+  }, [ledgerMap, todayKey, cashflowRows, openingBalance]);
+
+  const projectedMonthEndBalance = useMemo(() => {
+    const endKey = formatDateKey(endOfMonth);
+    const endRow = ledgerMap.get(endKey);
+    if (endRow?.balance !== undefined) {
+      return endRow.balance;
+    }
+    const fallbackBalance = cashflowRows[cashflowRows.length - 1]?.balance;
+    return fallbackBalance ?? openingBalance;
+  }, [ledgerMap, endOfMonth, cashflowRows, openingBalance]);
 
   const incomeTotal = useMemo(() => {
     return cashflowRows.reduce((sum, row) => {
@@ -210,43 +175,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     );
   }, [cashflowRows]);
 
-  const profitMetrics = useMemo(() => {
-    const initialTotals = {
-      totalIncome: 0,
-      totalNonTaxExpenses: 0,
-      totalTaxExpenses: 0,
-    };
-
-    return monthTransactions.reduce((acc, transaction) => {
-      if (transaction.type === 'income') {
-        acc.totalIncome += transaction.amount;
-      } else if (transaction.type === 'expense') {
-        if (transaction.group === 'tax') {
-          acc.totalTaxExpenses += transaction.amount;
-        } else {
-          acc.totalNonTaxExpenses += transaction.amount;
-        }
-      }
-      return acc;
-    }, initialTotals);
-  }, [monthTransactions]);
-
-  const operatingProfit = useMemo(
-    () => profitMetrics.totalIncome - profitMetrics.totalNonTaxExpenses,
-    [profitMetrics]
-  );
-
-  const netProfit = useMemo(
-    () => operatingProfit - profitMetrics.totalTaxExpenses,
-    [operatingProfit, profitMetrics.totalTaxExpenses]
-  );
-
-  // --- Calculations ---
-  const summary = useMemo(() => {
-    const net = monthEndBalance - monthStartBalance;
-    return { income: incomeTotal, expenses: expenseTotal, net };
-  }, [monthEndBalance, monthStartBalance, incomeTotal, expenseTotal]);
-
   const [isChartBuilderOpen, setIsChartBuilderOpen] = useState(false);
 
   const chartData = useMemo(() => {
@@ -270,12 +198,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       return {
         date: row.date,
-        balance: row.balance ?? monthStartBalance,
+        balance: row.balance ?? openingBalance,
         income,
         expense,
       };
     });
-  }, [cashflowRows, monthStartBalance]);
+  }, [cashflowRows, openingBalance]);
 
   const expensesByCategory = useMemo(() => {
     const data: Record<string, number> = {};
@@ -335,9 +263,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleExportDashboard = () => {
     const headers = ['חלק', 'תיאור', 'ערך', 'פרטים נוספים'];
     const rows: (string | number)[][] = [
-      ['KPI', 'יתרה נוכחית (תזרים)', todaysBalance, `יתרת פתיחה: ₪${monthStartBalance.toLocaleString()}`],
-      ['KPI', 'סה"כ הכנסות', summary.income, ''],
-      ['KPI', 'סה"כ הוצאות', summary.expenses, ''],
+      ['KPI', 'יתרה נוכחית (תזרים)', todaysBalance, `יתרת פתיחה: ₪${openingBalance.toLocaleString()}`],
+      ['KPI', 'סה"כ הכנסות', incomeTotal, ''],
+      ['KPI', 'סה"כ הוצאות', expenseTotal, ''],
       ['KPI', 'התאמות בנק נטו', bankAdjustmentNet, ''],
       [
         'KPI',
@@ -361,7 +289,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         'התפלגות הוצאות',
         cat.name,
         cat.value,
-        `${((cat.value / (summary.expenses || 1)) * 100).toFixed(1)}%`
+        `${((cat.value / (expenseTotal || 1)) * 100).toFixed(1)}%`
       ]);
     });
 
@@ -417,7 +345,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <BalanceHeroCard
           title="יתרה צפויה"
-          value={monthEndBalance}
+          value={projectedMonthEndBalance}
           icon={Scale}
           accentBgClass="bg-gradient-to-br from-amber-900/40 to-amber-500/10"
           accentIconClass="text-amber-300"
@@ -426,7 +354,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-8 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <KPICard 
           title="יתרה נוכחית" 
           value={todaysBalance} 
@@ -437,7 +365,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <KPICard 
           title="יתרה צפויה" 
-          value={monthEndBalance} 
+          value={projectedMonthEndBalance} 
           icon={Scale} 
           accentBgClass="text-amber-300"
           accentTextClass="text-amber-300"
@@ -445,7 +373,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <KPICard 
           title="הכנסות החודש" 
-          value={summary.income} 
+          value={incomeTotal} 
           icon={TrendingUp} 
           trend={12} 
           accentBgClass="text-emerald-300"
@@ -453,32 +381,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <KPICard 
           title="הוצאות החודש" 
-          value={summary.expenses} 
+          value={expenseTotal} 
           icon={TrendingDown} 
           trend={-5} 
           accentBgClass="text-red-300"
           accentTextClass="text-red-300"
-        />
-        <KPICard 
-          title="תזרים נטו" 
-          value={summary.net} 
-          icon={Scale} 
-          accentBgClass="text-purple-300"
-          accentTextClass="text-purple-300"
-        />
-        <KPICard 
-          title="רווח תפעולי" 
-          value={operatingProfit}
-          icon={Activity}
-          accentBgClass="text-indigo-300"
-          accentTextClass="text-indigo-300"
-        />
-        <KPICard 
-          title="רווח נטו" 
-          value={netProfit}
-          icon={Scale}
-          accentBgClass="text-slate-300"
-          accentTextClass="text-slate-300"
         />
       </div>
       <div className="law-card">

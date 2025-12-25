@@ -277,31 +277,6 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
     }, empty);
   }, [dailyData]);
 
-  const totalIncomeAllSources = useMemo(
-    () => monthSummary.fee + monthSummary.otherIncome,
-    [monthSummary.fee, monthSummary.otherIncome]
-  );
-
-  const operatingProfit = useMemo(
-    () => totalIncomeAllSources - monthSummary.operational,
-    [totalIncomeAllSources, monthSummary.operational]
-  );
-
-  const netProfit = useMemo(
-    () =>
-      totalIncomeAllSources -
-      (monthSummary.operational + monthSummary.tax + monthSummary.loan + monthSummary.personal),
-    [
-      totalIncomeAllSources,
-      monthSummary.operational,
-      monthSummary.tax,
-      monthSummary.loan,
-      monthSummary.personal,
-    ]
-  );
-
-  const netCashflow = netProfit;
-
   const totalOperationalExpenses = useMemo(
     () => monthSummary.operational + monthSummary.operationalPending,
     [monthSummary]
@@ -466,18 +441,6 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
             <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-gold-500 text-center shadow-inner">
                 <span className="block text-xs text-slate-300 mb-1">סה"כ שכר טרחה</span>
                 <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(monthSummary.fee)}</span>
-            </div>
-            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
-                <span className="block text-xs text-slate-300 mb-1">תזרים נטו</span>
-                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(netCashflow)}</span>
-            </div>
-            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
-                <span className="block text-xs text-slate-300 mb-1">רווח תפעולי</span>
-                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(operatingProfit)}</span>
-            </div>
-            <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
-                <span className="block text-xs text-slate-300 mb-1">רווח נטו</span>
-                <span className="font-bold text-lg text-[var(--law-gold)]">{formatCurrency(netProfit)}</span>
             </div>
             <div className="px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-center">
                 <span className="block text-xs text-slate-300 mb-1">סה"כ הוצאות</span>
