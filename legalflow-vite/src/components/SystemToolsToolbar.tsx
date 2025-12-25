@@ -7,12 +7,10 @@ interface SystemToolsToolbarProps {
   lastSyncText: string;
   syncError?: string | null;
   importFeedback?: { type: 'success' | 'error'; message: string } | null;
-  alertsCount: number;
   onManualSync: () => void;
   onImport: () => void;
   onExport: () => void;
   onOpenBalance: () => void;
-  onShowAlerts: () => void;
 }
 
 const buttonClass =
@@ -25,12 +23,10 @@ const SystemToolsToolbar: React.FC<SystemToolsToolbarProps> = ({
   lastSyncText,
   syncError,
   importFeedback,
-  alertsCount,
   onManualSync,
   onImport,
   onExport,
   onOpenBalance,
-  onShowAlerts,
 }) => (
   <div className="flex flex-col gap-2 text-right text-slate-100">
     <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-slate-300">
@@ -61,14 +57,6 @@ const SystemToolsToolbar: React.FC<SystemToolsToolbarProps> = ({
       </button>
       <button onClick={onOpenBalance} className={buttonClass}>
         עדכון יתרת פתיחה
-      </button>
-      <button onClick={onShowAlerts} className={`${buttonClass} flex items-center gap-2`}>
-        <span>התראות</span>
-        {alertsCount > 0 && (
-          <span className="rounded-full bg-red-500/80 px-2 py-0.5 text-[11px] font-bold text-white">
-            {alertsCount}
-          </span>
-        )}
       </button>
     </div>
     {importFeedback && (

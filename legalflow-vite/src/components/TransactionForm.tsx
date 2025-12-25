@@ -7,6 +7,13 @@ import { formatDateKey } from '../utils/date';
 import { suggestCategoryForTransaction, type CategorySuggestion } from '../services/insightService';
 import { lightInputBaseClasses, lightInputCompactClasses } from './ui/inputStyles';
 
+const FEE_CATEGORY_NAME = 'שכר טרחה';
+
+const getDefaultCategoryForGroup = (value: TransactionGroup) =>
+  value === 'fee' ? FEE_CATEGORY_NAME : '';
+
+type PaymentMethod = Transaction['paymentMethod'];
+
 interface TransactionFormProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,16 +48,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   existingTransactions = [],
 }) => {
   const isEditing = Boolean(transactionToEdit);
-  const [type, setType] = useState<'income' | 'expense'>('income');
-  const [group, setGroup] = useState<TransactionGroup>('fee');
+
+  const derivedInitialType: 'income' | 'expense' =
+    transactionToEdit?.type ??
+    (initialGroup
+      ? (initialGroup === 'fee' || initialGroup === 'other_income' ? 'income' : 'expense')
+      : undefined) ??
+    initialType ??
+    'income';
+
+  const derivedInitialGroup: TransactionGroup =
+    transactionToEdit?.group ??
+    initialGroup ??
+    (derivedInitialType === 'income' ? 'fee' : 'operational');
+
+  const [type, setType] = useState<'income' | 'expense'>(derivedInitialType);
+  const [group, setGroup] = useState<TransactionGroup>(derivedInitialGroup);
   
   const [amount, setAmount] = useState('');
   const [isAmountManual, setIsAmountManual] = useState(false);
   const [date, setDate] = useState(formatDateKey(new Date()));
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState<string>(() => getDefaultCategoryForGroup(derivedInitialGroup));
   const [description, setDescription] = useState('');
   const [clientReference, setClientReference] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('transfer');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('transfer');
   const [status, setStatus] = useState<'pending' | 'completed'>('completed');
   
   const [availableCategories, setAvailableCategories] = useState(getAllCategories());
@@ -85,9 +106,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       setAmount(transactionToEdit.amount.toString());
       setIsAmountManual(true);
       setDescription(transactionToEdit.description || '');
-      setCategory(transactionToEdit.category || '');
+      setCategory(transactionToEdit.category || getDefaultCategoryForGroup(transactionToEdit.group));
       setClientReference(transactionToEdit.clientReference || '');
-      setPaymentMethod((transactionToEdit.paymentMethod as string) || 'transfer');
+      setPaymentMethod(transactionToEdit.paymentMethod ?? 'transfer');
       setStatus(transactionToEdit.status || 'completed');
       setLoanEndMonth(transactionToEdit.loanEndMonth || '');
       setIsRecurring(false);
@@ -99,27 +120,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
-    if (initialDate) {
-      setDate(initialDate);
-    } else {
-      setDate(formatDateKey(new Date()));
-    }
+    const resolvedDate = initialDate ?? formatDateKey(new Date());
+    setDate(resolvedDate);
+
+    let resolvedType: 'income' | 'expense';
+    let resolvedGroup: TransactionGroup;
 
     if (initialGroup) {
-      setGroup(initialGroup);
-      setType((initialGroup === 'fee' || initialGroup === 'other_income') ? 'income' : 'expense');
+      resolvedGroup = initialGroup;
+      resolvedType = initialGroup === 'fee' || initialGroup === 'other_income' ? 'income' : 'expense';
     } else if (initialType) {
-      setType(initialType);
-      setGroup(initialType === 'income' ? 'fee' : 'operational');
+      resolvedType = initialType;
+      resolvedGroup = initialType === 'income' ? 'fee' : 'operational';
     } else {
-      setType('income');
-      setGroup('fee');
+      resolvedType = 'income';
+      resolvedGroup = 'fee';
     }
+
+    setType(resolvedType);
+    setGroup(resolvedGroup);
+    setCategory(getDefaultCategoryForGroup(resolvedGroup));
 
     setAmount('');
     setIsAmountManual(false);
     setDescription('');
-    setCategory('');
     setClientReference('');
     setPaymentMethod('transfer');
 
@@ -173,23 +197,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   ]);
 
   const handleTypeChange = (newType: 'income' | 'expense') => {
-      setType(newType);
+    setType(newType);
+    if (newType === 'income') {
+      setGroup('fee'); // Default income
+      setCategory(FEE_CATEGORY_NAME);
+      setStatus('pending');
+    } else {
+      setGroup('operational'); // Default expense
       setCategory('');
-      if (newType === 'income') {
-          setGroup('fee'); // Default income
-          setStatus('pending');
-      } else {
-          setGroup('operational'); // Default expense
-          setStatus('completed');
-      }
+      setStatus('completed');
+    }
   };
-
-  // Auto-set category name if Group is Fee (Implicit category)
-  useEffect(() => {
-      if (group === 'fee') {
-          setCategory('שכר טרחה');
-      }
-  }, [group]);
 
   const applyCategoryDefaults = (categoryName: string, force = false) => {
     const selectedCat = availableCategories.find(c => c.name === categoryName);
@@ -211,7 +229,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     let finalCategory = category;
@@ -229,7 +247,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     // For Fee, we enforce category name
     if (group === 'fee') {
-        finalCategory = 'שכר טרחה';
+        finalCategory = FEE_CATEGORY_NAME;
     }
 
     if (type === 'income' && description === 'ADD_NEW_CLIENT') {
@@ -264,7 +282,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         category: finalCategory,
         description: finalDescription,
         clientReference,
-        paymentMethod: paymentMethod as any,
+        paymentMethod,
         status,
         isManualOverride,
         loanEndMonth: group === 'loan' ? (loanEndMonth || undefined) : undefined,
@@ -284,9 +302,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       category: finalCategory,
       description: finalDescription,
       clientReference,
-      paymentMethod: paymentMethod as any,
+      paymentMethod,
       status,
-      isRecurring: isRecurring,
+      isRecurring,
       isManualOverride,
       loanEndMonth: group === 'loan' ? (loanEndMonth || undefined) : undefined
     };
@@ -363,16 +381,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <div className="flex p-1 bg-slate-50 rounded-lg mb-4 border border-slate-100 overflow-x-auto">
                     {type === 'income' ? (
                         <>
-                         <button
+                        <button
                             type="button"
-                            onClick={() => { setGroup('fee'); setCategory('שכר טרחה'); }}
+                            onClick={() => { setGroup('fee'); setCategory(FEE_CATEGORY_NAME); }}
                             className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all whitespace-nowrap ${
                                 group === 'fee' 
                                     ? 'bg-emerald-600 text-white shadow-sm' 
                                     : 'text-slate-500 hover:text-emerald-800 hover:bg-emerald-50'
                             }`}
                         >
-                            שכר טרחה
+                            {FEE_CATEGORY_NAME}
                         </button>
                         <button
                             type="button"
@@ -443,7 +461,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">קטגוריה</label>
                     <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed">
-                        שכר טרחה
+                        {FEE_CATEGORY_NAME}
                     </div>
                 </div>
             ) : (
@@ -624,7 +642,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <label className="block text-sm font-medium text-slate-700 mb-1">אמצעי תשלום</label>
                 <select
                   value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
                   className={lightInputBaseClasses}
                 >
                   {PAYMENT_METHODS.map(m => (
@@ -675,7 +693,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                 min="2" 
                                 max="60" 
                                 value={recurringMonths}
-                                onChange={(e) => setRecurringMonths(parseInt(e.target.value))}
+                                onChange={(e) => setRecurringMonths(parseInt(e.target.value, 10))}
                                 className={`w-16 ${lightInputCompactClasses} text-center`}
                              />
                              <span className="text-sm text-blue-700">חודשים</span>

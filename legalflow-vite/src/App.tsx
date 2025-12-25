@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, Briefcase, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, ListTodo, HelpCircle } from 'lucide-react';
-import type { Transaction, TransactionGroup, LloydsCollectionItem, GenericCollectionItem, AccessCollectionItem, TaskItem } from './types';
+import { Plus, LayoutDashboard, Table2, LogOut, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, HelpCircle } from 'lucide-react';
+import type { Transaction, TransactionGroup } from './types';
 import {
   getTransactions,
   saveTransactions,
@@ -16,18 +16,6 @@ import {
   getCustomCategories,
   getLoanOverrides,
   replaceLoanOverrides,
-  getLloydsCollectionItems,
-  saveLloydsCollectionItems,
-  replaceLloydsCollectionItems,
-  getGenericCollectionItems,
-  saveGenericCollectionItems,
-  replaceGenericCollectionItems,
-  getAccessCollectionItems,
-  saveAccessCollectionItems,
-  replaceAccessCollectionItems,
-  getTasks,
-  saveTasks,
-  STORAGE_EVENT,
   isLoanCategoryLabel,
 } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
@@ -38,23 +26,14 @@ import Login from './components/Login';
 import { fetchCloudSnapshot, persistCloudSnapshot, UnauthorizedError } from './services/cloudService';
 import { formatDateKey, parseDateKey } from './utils/date';
 import SystemToolsToolbar from './components/SystemToolsToolbar';
-import ClientInsightPanel from './components/ClientInsightPanel';
-import type { ClientInsightTarget } from './components/ClientInsightPanel';
 import { calculateForecast } from './services/forecastService';
 import { buildDailyWhatsappSummary } from './services/cfoAssistantService';
 import DailyWhatsappSummaryModal from './components/DailyWhatsappSummaryModal';
-import UnifiedAlertsPanel from './components/UnifiedAlertsPanel';
-import { buildUnifiedAlerts, type AlertTarget } from './services/alertEngine';
 import HelpCenterModal from './components/HelpCenterModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
-const CollectionTracker = lazy(() => import('./components/CollectionTracker'));
 const ExecutiveSummary = lazy(() => import('./components/ExecutiveSummary'));
-const LloydsCollectionTracker = lazy(() => import('./components/LloydsCollectionTracker'));
-const GenericCollectionTracker = lazy(() => import('./components/GenericCollectionTracker'));
-const AccessCollectionTracker = lazy(() => import('./components/AccessCollectionTracker'));
-const TaskManager = lazy(() => import('./components/TaskManager'));
 
 const CASHFLOW_CUTOFF = parseDateKey('2025-11-01');
 const BACKUP_SESSION_KEY = 'legalflow_backup_done_for_session';
@@ -147,16 +126,7 @@ const App: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   
   // Updated tabs
-  const [activeTab, setActiveTab] = useState<
-    | 'dashboard'
-    | 'flow'
-    | 'collection'
-    | 'summary'
-    | 'collectionLloyds'
-    | 'collectionGeneric'
-    | 'collectionAccess'
-    | 'tasks'
-  >('flow');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'flow' | 'summary'>('flow');
 
   // Form initial state helpers
   const [formInitialDate, setFormInitialDate] = useState<string | undefined>(undefined);
@@ -169,20 +139,12 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importFeedback, setImportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
-  const [storageSyncVersion, setStorageSyncVersion] = useState(0);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [cloudBootstrapVersion, setCloudBootstrapVersion] = useState(0);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
   const [lastSyncIso, setLastSyncIso] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [lloydsItems, setLloydsItems] = useState<LloydsCollectionItem[]>(() => getLloydsCollectionItems());
-  const [genericItems, setGenericItems] = useState<GenericCollectionItem[]>(() => getGenericCollectionItems());
-  const [accessItems, setAccessItems] = useState<AccessCollectionItem[]>(() => getAccessCollectionItems());
-  const [tasks, setTasks] = useState<TaskItem[]>(() => getTasks());
-  const [highlightedCollection, setHighlightedCollection] = useState<{ type: 'lloyds' | 'generic' | 'access'; id: string } | null>(null);
-  const [flowHighlightTarget, setFlowHighlightTarget] = useState<{ date: string; transactionIds?: string[] } | null>(null);
-  const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isBackupReminderOpen, setIsBackupReminderOpen] = useState(false);
   const [backupReminderWarning, setBackupReminderWarning] = useState<string | null>(null);
   const [hasSessionBackup, setHasSessionBackup] = useState<boolean>(() => {
@@ -192,13 +154,9 @@ const App: React.FC = () => {
     return sessionStorage.getItem(BACKUP_SESSION_KEY) === '1';
   });
   const [logoutWarning, setLogoutWarning] = useState<string | null>(null);
-  const [clientInsightTarget, setClientInsightTarget] = useState<ClientInsightTarget | null>(null);
   const [isDailyWhatsappModalOpen, setIsDailyWhatsappModalOpen] = useState(false);
   const [dailyWhatsappSummary, setDailyWhatsappSummary] = useState('');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const handleOpenClientInsight = useCallback((target: ClientInsightTarget) => {
-    setClientInsightTarget(target);
-  }, []);
   const handleOpenDailyWhatsappSummary = useCallback(() => {
     const summary = buildDailyWhatsappSummary(transactions, initialBalance, new Date());
     setDailyWhatsappSummary(summary);
@@ -232,45 +190,12 @@ const App: React.FC = () => {
     setCloudBootstrapVersion(prev => prev + 1);
   }, []);
 
-  const persistLloydsItems = useCallback((nextItems: LloydsCollectionItem[]) => {
-    setLloydsItems(nextItems);
-    saveLloydsCollectionItems(nextItems);
-  }, []);
-
-  const persistGenericItems = useCallback((nextItems: GenericCollectionItem[]) => {
-    setGenericItems(nextItems);
-    saveGenericCollectionItems(nextItems);
-  }, []);
-
-  const persistAccessItems = useCallback((nextItems: AccessCollectionItem[]) => {
-    setAccessItems(nextItems);
-    saveAccessCollectionItems(nextItems);
-  }, []);
-
-  const persistTasks = useCallback((nextTasks: TaskItem[]) => {
-    setTasks(nextTasks);
-    saveTasks(nextTasks);
-  }, []);
-
   // --- Persistence ---
   useEffect(() => {
      // Whenever transactions change, we save them.
      // Note: The sync logic is handled inside the update handlers to avoid infinite loops in useEffect
      saveTransactions(transactions);
   }, [transactions]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const handleStorageSync = () => {
-      setStorageSyncVersion(prev => prev + 1);
-    };
-
-    window.addEventListener(STORAGE_EVENT, handleStorageSync);
-    return () => window.removeEventListener(STORAGE_EVENT, handleStorageSync);
-  }, []);
 
   // --- 3-Hour Automatic Backup ---
   useEffect(() => {
@@ -414,16 +339,6 @@ const App: React.FC = () => {
     }, 280);
   };
 
-  const handleMarkAsPaid = (transaction: Transaction) => {
-      if(window.confirm(`האם לסמן את החשבון של ${transaction.description} כשולם?`)) {
-          const updated = transactions.map(t => 
-            t.id === transaction.id ? { ...t, status: 'completed' as const } : t
-          );
-          // No need to sync taxes here as amount/date didn't change, but status change is fine.
-          setTransactions(updated); 
-      }
-  };
-
   const handleToggleTransactionStatus = (transactionId: string, nextStatus: 'pending' | 'completed') => {
     setTransactions(prev => prev.map(t => 
       t.id === transactionId ? { ...t, status: nextStatus } : t
@@ -554,12 +469,6 @@ const App: React.FC = () => {
         replaceClients(snapshot.clients ?? []);
         replaceCustomCategories(snapshot.customCategories ?? []);
         replaceLoanOverrides(snapshot.loanOverrides ?? {});
-        const snapshotLloyds = replaceLloydsCollectionItems(snapshot.lloydsCollection ?? []);
-        const snapshotGeneric = replaceGenericCollectionItems(snapshot.genericCollection ?? []);
-        const snapshotAccess = replaceAccessCollectionItems(snapshot.accessCollection ?? []);
-        setLloydsItems(snapshotLloyds);
-        setGenericItems(snapshotGeneric);
-        setAccessItems(snapshotAccess);
         setInitialBalance(
           typeof snapshot.initialBalance === 'number'
             ? snapshot.initialBalance
@@ -597,12 +506,9 @@ const App: React.FC = () => {
       clients: getClients(),
       customCategories: getCustomCategories(),
       loanOverrides: getLoanOverrides(),
-      lloydsCollection: lloydsItems,
-      genericCollection: genericItems,
-      accessCollection: accessItems,
       updatedAt: new Date().toISOString(),
     };
-  }, [transactions, initialBalance, lloydsItems, genericItems, accessItems]);
+  }, [transactions, initialBalance]);
 
   const performCloudSync = useCallback(async () => {
     if (!currentUser || !authToken || isRestoringFromCloud.current) {
@@ -640,27 +546,11 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser || !authToken || isRestoringFromCloud.current) return;
     performCloudSync();
-  }, [
-    transactions,
-    initialBalance,
-    lloydsItems,
-    genericItems,
-    currentUser,
-    authToken,
-    storageSyncVersion,
-    performCloudSync,
-  ]);
+  }, [transactions, initialBalance, currentUser, authToken, performCloudSync]);
 
   useEffect(() => {
     setBalanceDraft(initialBalance.toString());
   }, [initialBalance]);
-
-  useEffect(() => {
-    setLloydsItems(getLloydsCollectionItems());
-    setGenericItems(getGenericCollectionItems());
-    setAccessItems(getAccessCollectionItems());
-    setTasks(getTasks());
-  }, [storageSyncVersion]);
 
   useEffect(() => {
     if (!importFeedback) return;
@@ -704,9 +594,6 @@ const App: React.FC = () => {
         clients?: unknown;
         customCategories?: unknown;
         loanOverrides?: unknown;
-        lloydsCollection?: unknown;
-        genericCollection?: unknown;
-        accessCollection?: unknown;
       };
 
       if (!Array.isArray(backup.transactions)) {
@@ -730,21 +617,6 @@ const App: React.FC = () => {
 
       if (backup.loanOverrides && typeof backup.loanOverrides === 'object') {
         replaceLoanOverrides(backup.loanOverrides);
-      }
-
-      if (backup.lloydsCollection) {
-        const sanitized = replaceLloydsCollectionItems(backup.lloydsCollection);
-        setLloydsItems(sanitized);
-      }
-
-      if (backup.genericCollection) {
-        const sanitized = replaceGenericCollectionItems(backup.genericCollection);
-        setGenericItems(sanitized);
-      }
-
-      if (backup.accessCollection) {
-        const sanitized = replaceAccessCollectionItems(backup.accessCollection);
-        setAccessItems(sanitized);
       }
 
       return;
@@ -816,46 +688,6 @@ const App: React.FC = () => {
     setIsBalanceModalOpen(true);
   }, []);
 
-  const handleShowAlerts = useCallback(() => {
-    setIsAlertsOpen(true);
-  }, []);
-
-  const handleAlertNavigate = useCallback(
-    (target?: AlertTarget) => {
-      setIsAlertsOpen(false);
-      if (!target) {
-        return;
-      }
-      if (target.type === 'collection') {
-        if (target.tracker === 'lloyds') {
-          setActiveTab('collectionLloyds');
-        } else if (target.tracker === 'generic') {
-          setActiveTab('collectionGeneric');
-        } else {
-          setActiveTab('collectionAccess');
-        }
-        setHighlightedCollection({ type: target.tracker, id: target.itemId });
-        return;
-      }
-      if (target.type === 'flow') {
-        setActiveTab('flow');
-        setFlowHighlightTarget({ date: target.date, transactionIds: target.transactionIds });
-        return;
-      }
-      if (target.type === 'dashboard') {
-        setActiveTab('dashboard');
-      }
-    },
-    []
-  );
-
-  const clearHighlight = useCallback(() => {
-    setHighlightedCollection(null);
-  }, []);
-  const clearFlowHighlight = useCallback(() => {
-    setFlowHighlightTarget(null);
-  }, []);
-
   const syncColorClass =
     syncStatus === 'syncing' ? 'bg-amber-400' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500';
   const syncLabel =
@@ -863,14 +695,6 @@ const App: React.FC = () => {
   const lastSyncText = lastSyncIso
     ? `עודכן ${new Date(lastSyncIso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`
     : 'טרם בוצע סנכרון';
-  const alertBundle = useMemo(
-    () => buildUnifiedAlerts(transactions, lloydsItems, genericItems, accessItems),
-    [transactions, lloydsItems, genericItems, accessItems]
-  );
-  const alertsCount = alertBundle.counts.total;
-  const lloydsHighlightId = highlightedCollection?.type === 'lloyds' ? highlightedCollection.id : null;
-  const genericHighlightId = highlightedCollection?.type === 'generic' ? highlightedCollection.id : null;
-  const accessHighlightId = highlightedCollection?.type === 'access' ? highlightedCollection.id : null;
 
 useEffect(() => {
   if (!currentUser || !authToken) {
@@ -973,13 +797,6 @@ useEffect(() => {
             <Table2 className="w-5 h-5" />
             תזרים חודשי
           </button>
-          <button
-            onClick={() => setIsAlertsOpen(true)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-slate-200 hover:bg-white/5"
-          >
-            <AlertTriangle className="w-5 h-5 text-rose-300" />
-            Alerts
-          </button>
           <button 
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
@@ -1003,62 +820,6 @@ useEffect(() => {
           >
             <FileText className="w-5 h-5" />
             תקציר מנהלים
-          </button>
-
-           <button 
-            onClick={() => setActiveTab('collection')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
-              activeTab === 'collection'
-                ? 'bg-white/10 text-white shadow-lg border border-white/10'
-                : 'text-slate-400 hover:bg-white/5'
-            }`}
-          >
-            <Briefcase className="w-5 h-5" />
-            תשלומים צפויים
-          </button>
-          <button 
-            onClick={() => setActiveTab('collectionLloyds')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
-              activeTab === 'collectionLloyds'
-                ? 'bg-white/10 text-white shadow-lg border border-white/10'
-                : 'text-slate-400 hover:bg-white/5'
-            }`}
-          >
-            <Briefcase className="w-5 h-5" />
-            מעקב גבייה – לוידס
-          </button>
-          <button 
-            onClick={() => setActiveTab('collectionGeneric')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
-              activeTab === 'collectionGeneric'
-                ? 'bg-white/10 text-white shadow-lg border border-white/10'
-                : 'text-slate-400 hover:bg-white/5'
-            }`}
-          >
-            <Briefcase className="w-5 h-5" />
-            מעקב גבייה – לקוחות שונים
-          </button>
-          <button 
-            onClick={() => setActiveTab('collectionAccess')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
-              activeTab === 'collectionAccess'
-                ? 'bg-white/10 text-white shadow-lg border border-white/10'
-                : 'text-slate-400 hover:bg-white/5'
-            }`}
-          >
-            <Briefcase className="w-5 h-5" />
-            מעקב גבייה – אקסס
-          </button>
-          <button
-            onClick={() => setActiveTab('tasks')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
-              activeTab === 'tasks'
-                ? 'bg-white/10 text-white shadow-lg border border-white/10'
-                : 'text-slate-400 hover:bg-white/5'
-            }`}
-          >
-            <ListTodo className="w-5 h-5" />
-            משימות
           </button>
         </nav>
 
@@ -1125,9 +886,6 @@ useEffect(() => {
             <div>
               <h2 className="text-2xl font-bold text-white">
                 {activeTab === 'dashboard' && 'סקירה חודשית'}
-                {activeTab === 'collection' && 'תשלומים צפויים'}
-                {activeTab === 'collectionLloyds' && 'מעקב גבייה – לוידס'}
-                {activeTab === 'collectionGeneric' && 'מעקב גבייה – לקוחות שונים'}
                 {activeTab === 'summary' && 'תקציר מנהלים'}
               </h2>
               <p className="text-slate-400 text-sm mt-1">
@@ -1154,8 +912,6 @@ useEffect(() => {
               forecastResult={forecastResult}
               recentTransactionIds={recentTransactionIds}
               deletingTransactionId={pendingDeletionId}
-              highlightedDate={flowHighlightTarget?.date ?? null}
-              onClearHighlight={flowHighlightTarget ? clearFlowHighlight : undefined}
               systemToolsToolbar={
                 <SystemToolsToolbar
                   syncStatus={syncStatus}
@@ -1164,12 +920,10 @@ useEffect(() => {
                   lastSyncText={lastSyncText}
                   syncError={syncError}
                   importFeedback={importFeedback}
-                  alertsCount={alertsCount}
                   onManualSync={handleManualSync}
                   onImport={handleImportButtonClick}
                   onExport={handleExportBackup}
                   onOpenBalance={handleOpenBalanceModal}
-                  onShowAlerts={handleShowAlerts}
                 />
               }
             />
@@ -1183,58 +937,12 @@ useEffect(() => {
             />
           )}
 
-          {activeTab === 'collection' && (
-              <CollectionTracker 
-                  transactions={transactions}
-                  onMarkAsPaid={handleMarkAsPaid}
-                  recentTransactionIds={recentTransactionIds}
-                  deletingTransactionId={pendingDeletionId}
-              />
-          )}
-
-          {activeTab === 'collectionLloyds' && (
-            <LloydsCollectionTracker
-              items={lloydsItems}
-              onChange={persistLloydsItems}
-              highlightedId={lloydsHighlightId}
-              onClearHighlight={lloydsHighlightId ? clearHighlight : undefined}
-              onClientInsightRequest={handleOpenClientInsight}
-            />
-          )}
-
-          {activeTab === 'collectionGeneric' && (
-            <GenericCollectionTracker
-              items={genericItems}
-              onChange={persistGenericItems}
-              highlightedId={genericHighlightId}
-              onClearHighlight={genericHighlightId ? clearHighlight : undefined}
-              onClientInsightRequest={handleOpenClientInsight}
-            />
-          )}
-
-          {activeTab === 'collectionAccess' && (
-            <AccessCollectionTracker
-              items={accessItems}
-              onChange={persistAccessItems}
-              highlightedId={accessHighlightId}
-              onClearHighlight={accessHighlightId ? clearHighlight : undefined}
-              onClientInsightRequest={handleOpenClientInsight}
-            />
-          )}
-
           {activeTab === 'summary' && (
             <ExecutiveSummary
               transactions={transactions}
               initialBalance={initialBalance}
-              lloydsItems={lloydsItems}
-              genericItems={genericItems}
-              accessItems={accessItems}
               onRequestDailyWhatsappSummary={handleOpenDailyWhatsappSummary}
             />
-          )}
-
-          {activeTab === 'tasks' && (
-            <TaskManager tasks={tasks} onChange={persistTasks} />
           )}
           </div>
         </Suspense>
@@ -1253,29 +961,13 @@ useEffect(() => {
             <Table2 className="w-6 h-6" />
             <span className="text-[10px]">תזרים</span>
           </button>
-          <button onClick={() => setActiveTab('collection')} className={`flex flex-col items-center gap-1 min-w-[90px] ${activeTab === 'collection' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
-            <Briefcase className="w-6 h-6" />
-            <span className="text-[10px] text-center leading-tight">תשלומים צפויים</span>
-          </button>
-          <button onClick={() => setActiveTab('collectionLloyds')} className={`flex flex-col items-center gap-1 min-w-[120px] ${activeTab === 'collectionLloyds' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
-            <Briefcase className="w-6 h-6" />
-            <span className="text-[9px] text-center leading-tight">מעקב גבייה – לוידס</span>
-          </button>
-          <button onClick={() => setActiveTab('collectionGeneric')} className={`flex flex-col items-center gap-1 min-w-[130px] ${activeTab === 'collectionGeneric' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
-            <Briefcase className="w-6 h-6" />
-            <span className="text-[9px] text-center leading-tight">מעקב גבייה – לקוחות שונים</span>
-          </button>
-          <button onClick={() => setActiveTab('collectionAccess')} className={`flex flex-col items-center gap-1 min-w-[120px] ${activeTab === 'collectionAccess' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
-            <Briefcase className="w-6 h-6" />
-            <span className="text-[9px] text-center leading-tight">מעקב גבייה – אקסס</span>
+          <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 min-w-[90px] ${activeTab === 'dashboard' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
+            <LayoutDashboard className="w-6 h-6" />
+            <span className="text-[10px] text-center leading-tight">לוח בקרה</span>
           </button>
           <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 min-w-[70px] ${activeTab === 'summary' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
             <FileText className="w-6 h-6" />
             <span className="text-[10px]">מנהלים</span>
-          </button>
-          <button onClick={() => setActiveTab('tasks')} className={`flex flex-col items-center gap-1 min-w-[80px] ${activeTab === 'tasks' ? 'text-[#d4af37]' : 'text-slate-400'}`}>
-            <ListTodo className="w-6 h-6" />
-            <span className="text-[10px]">משימות</span>
           </button>
           <button onClick={() => openTransactionForm()} className="flex flex-col items-center justify-center min-w-[70px]">
             <div className="bg-slate-900 p-3 rounded-full shadow-lg text-[#d4af37] border-2 border-[#d4af37]">
@@ -1321,20 +1013,6 @@ useEffect(() => {
                 }`}
               >
                 {syncStatus === 'syncing' ? 'מסנכרן...' : 'סנכרון עכשיו'}
-              </button>
-              <button
-                onClick={() => {
-                  setIsAlertsOpen(true);
-                  setIsMobileActionsOpen(false);
-                }}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between"
-              >
-                <span>התראות</span>
-                {alertsCount > 0 && (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
-                    {alertsCount}
-                  </span>
-                )}
               </button>
               <button
                 onClick={handleMobileImportClick}
@@ -1460,23 +1138,6 @@ useEffect(() => {
         accept="application/json"
         className="hidden"
         onChange={handleBackupFileChange}
-      />
-
-      <UnifiedAlertsPanel
-        isOpen={isAlertsOpen}
-        onClose={() => setIsAlertsOpen(false)}
-        alerts={alertBundle.alerts}
-        onNavigate={handleAlertNavigate}
-      />
-
-      <ClientInsightPanel
-        isOpen={Boolean(clientInsightTarget)}
-        target={clientInsightTarget}
-        onClose={() => setClientInsightTarget(null)}
-        transactions={transactions}
-        lloydsItems={lloydsItems}
-        genericItems={genericItems}
-        accessItems={accessItems}
       />
 
     </div>

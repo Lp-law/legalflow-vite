@@ -1,36 +1,23 @@
 import React, { useState } from 'react';
-import type {
-  Transaction,
-  LloydsCollectionItem,
-  GenericCollectionItem,
-  AccessCollectionItem,
-} from '../types';
+import type { Transaction } from '../types';
 import { generateExecutiveSummary } from '../services/reportService';
 import { exportToCSV } from '../services/exportService';
-import { FileText, Copy, Check, Sparkles, Download, PieChart, MessageCircle } from 'lucide-react';
-import ExecutiveSegmentsPanel from './ExecutiveSegmentsPanel';
+import { FileText, Copy, Check, Sparkles, Download, MessageCircle } from 'lucide-react';
 
 interface ExecutiveSummaryProps {
   transactions: Transaction[];
   initialBalance: number;
-  lloydsItems: LloydsCollectionItem[];
-  genericItems: GenericCollectionItem[];
-  accessItems: AccessCollectionItem[];
   onRequestDailyWhatsappSummary: () => void;
 }
 
 const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   transactions,
   initialBalance,
-  lloydsItems,
-  genericItems,
-  accessItems,
   onRequestDailyWhatsappSummary,
 }) => {
   const [reportText, setReportText] = useState<string>('');
   const [currentPeriod, setCurrentPeriod] = useState<'month' | 'quarter' | 'year' | null>(null);
   const [copied, setCopied] = useState(false);
-  const [showSegments, setShowSegments] = useState(false);
 
   const handleGenerate = (period: 'month' | 'quarter' | 'year') => {
     setCurrentPeriod(period);
@@ -122,27 +109,7 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           <span className="text-sm text-slate-300">כתוב לי סיכום מנהלים שנתי</span>
         </button>
 
-        <button
-          onClick={() => setShowSegments(true)}
-          className="relative overflow-hidden p-8 rounded-3xl border-2 transition-all group border-white/10 bg-white/5 hover:border-[var(--law-gold)] hover:shadow-xl"
-        >
-          <div className="absolute top-0 left-0 w-full h-1 bg-[var(--law-gold)] transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
-          <PieChart className="w-10 h-10 mb-4 text-slate-400 group-hover:text-[var(--law-gold)]" />
-          <span className="block text-xl font-bold text-white mb-2">פילוחים</span>
-          <span className="text-sm text-slate-300">
-            בדיקת מצב מעקבי הגבייה לפי טווחי זמן וחובות פתוחים
-          </span>
-        </button>
       </div>
-
-      {showSegments && (
-        <ExecutiveSegmentsPanel
-          lloyds={lloydsItems}
-          generic={genericItems}
-          access={accessItems}
-          onClose={() => setShowSegments(false)}
-        />
-      )}
 
       {reportText && (
         <div className="bg-white/5 rounded-3xl border border-white/10 shadow-xl overflow-hidden animate-fade-in-up">
