@@ -757,6 +757,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                     {/* FOOTER ROW */}
                     <tfoot className="bg-white/10 border-t border-white/10 text-xs sticky bottom-0 z-20 font-bold shadow-inner text-white">
                         <tr>
+                            <td className="px-2 py-3 text-right border-l border-white/10 hidden md:table-cell" />
                             <td className="px-2 py-3 text-right">סה"כ:</td>
                             
                             {/* FEE TOTALS */}
