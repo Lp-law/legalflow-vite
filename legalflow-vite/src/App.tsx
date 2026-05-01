@@ -34,6 +34,7 @@ import DailyWhatsappSummaryModal from './components/DailyWhatsappSummaryModal';
 import HelpCenterModal from './components/HelpCenterModal';
 import FeeSummaryModal from './components/FeeSummaryModal';
 import DepartmentBreakdownModal from './components/DepartmentBreakdownModal';
+import ExpenseSearchModal from './components/ExpenseSearchModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -163,6 +164,7 @@ const App: React.FC = () => {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const [isDepartmentBreakdownOpen, setIsDepartmentBreakdownOpen] = useState(false);
+  const [isExpenseSearchOpen, setIsExpenseSearchOpen] = useState(false);
   const handleOpenDailyWhatsappSummary = useCallback(() => {
     const summary = buildDailyWhatsappSummary(transactions, initialBalance, new Date());
     setDailyWhatsappSummary(summary);
@@ -858,6 +860,13 @@ useEffect(() => {
             <FileText className="w-5 h-5" />
             פילוח לפי מחלקה
           </button>
+          <button
+            onClick={() => setIsExpenseSearchOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-slate-400 hover:bg-white/5"
+          >
+            <FileText className="w-5 h-5" />
+            חיפוש הוצאות לפי שם
+          </button>
 
           <div className="text-xs text-slate-400 font-bold px-4 mb-2 mt-6">ניהול משרד</div>
           <button 
@@ -1011,6 +1020,11 @@ useEffect(() => {
       <DepartmentBreakdownModal
         isOpen={isDepartmentBreakdownOpen}
         onClose={() => setIsDepartmentBreakdownOpen(false)}
+        transactions={transactions}
+      />
+      <ExpenseSearchModal
+        isOpen={isExpenseSearchOpen}
+        onClose={() => setIsExpenseSearchOpen(false)}
         transactions={transactions}
       />
 
