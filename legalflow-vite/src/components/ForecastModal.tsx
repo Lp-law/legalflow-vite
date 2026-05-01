@@ -67,6 +67,9 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
             <p className="text-sm text-slate-500 mt-1">
               נכון ל-{today.toLocaleDateString('he-IL')} · {f.closedMonthsCount} חודשים שנסגרו · {f.remainingMonthsCount} חודשים שנותרו
             </p>
+            <p className="text-xs text-blue-600 mt-1">
+              ℹ התחזית מתעדכנת אוטומטית בכל פתיחה - ככל שעוברים חודשים, יש יותר נתונים בפועל ופחות הערכה.
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -184,15 +187,15 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
               <div className="space-y-1">
                 <Row label="רווח תפעולי צפוי" value={f.operatingProfit} bold />
                 <Row
-                  label="מקדמות מס הכנסה ששולמו YTD"
+                  label="מקדמות מס הכנסה YTD (חודשים שנסגרו)"
                   value={f.taxAdvancesYTDActual}
-                  hint="רק מס הכנסה אישי (לא מע״מ)"
+                  hint="כל הרשומות מקבוצת מס שאינן מע״מ - שולם או צפוי"
                   negative
                 />
                 <Row
                   label="מקדמות מס צפויות לחודשים הנותרים"
-                  value={f.taxAdvancesRemainingPending}
-                  hint="חישוב אוטומטי לפי 14% × נטו"
+                  value={f.taxAdvancesRemainingForecast}
+                  hint={`14% × ${renderCurrency(f.avgMonthlyIncome)} ממוצע נטו × ${f.remainingMonthsCount} חודשים`}
                   negative
                 />
               </div>

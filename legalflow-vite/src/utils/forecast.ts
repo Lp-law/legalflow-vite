@@ -29,7 +29,7 @@ export type ForecastResult = {
 
   // Tax advances (income tax only, not VAT)
   taxAdvancesYTDActual: number;
-  taxAdvancesRemainingPending: number;
+  taxAdvancesRemainingForecast: number;
   totalTaxAdvances: number;
 
   // Forecast 2 result
@@ -52,8 +52,20 @@ export type ForecastResult = {
 const monthKeyOf = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
-const isIncomeTaxAdvance = (t: Transaction): boolean =>
-  t.group === 'tax' && t.category === 'מס הכנסה אישי';
+// Income tax advance recognition - lenient match by category OR description
+// to catch user-edited categories like "מס הכנסה" / "מקדמת מס" / etc.
+const isIncomeTaxAdvance = (t: Transaction): boolean => {
+  if (t.group !== 'tax') return false;
+  const cat = t.category || '';
+  if (cat.includes('מס הכנסה') || cat.includes('מקדמ')) return true;
+  const desc = t.description || '';
+  if (desc.includes('מקדמות מס') || desc.includes('מקדמת מס')) return true;
+  // Anything else in tax group that is NOT VAT counts as income tax
+  if (!cat.includes('מע"מ') && !cat.includes('מעמ') && !desc.includes('מע"מ')) return true;
+  return false;
+};
+
+const PROJECTED_TAX_RATE = 0.14;
 
 export const computeYearEndForecast = (
   transactions: Transaction[],
@@ -162,16 +174,23 @@ export const computeYearEndForecast = (
   const operatingProfit = incomeTotal - operationalExpensesTotal;
 
   // ---- Income tax advances ----
-  const taxAdvancesYTDActual = ytdCompleted
-    .filter(isIncomeTaxAdvance)
+  // YTD: include ANY tax record (any status) in the closed months. This
+  // catches both completed and still-pending past advances.
+  const taxAdvancesYTDActual = transactions
+    .filter(t => {
+      const d = parseDateKey(t.date);
+      return d >= startOfYear && d.getTime() <= endOfPrevMonthMs && isIncomeTaxAdvance(t);
+    })
     .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
 
-  // Remaining: pending OR completed in remaining months
-  const taxAdvancesRemainingPending = remainingAll
-    .filter(isIncomeTaxAdvance)
-    .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
+  // Remaining: project as 14% × projected NET monthly income × remaining months.
+  // This is the right approach because syncTaxTransactions only auto-creates tax
+  // records for months that ALREADY have income; future months without income yet
+  // would otherwise show zero tax, dragging the forecast down.
+  const taxAdvancesRemainingForecast =
+    avgMonthlyIncome * PROJECTED_TAX_RATE * remainingMonthsCount;
 
-  const totalTaxAdvances = taxAdvancesYTDActual + taxAdvancesRemainingPending;
+  const totalTaxAdvances = taxAdvancesYTDActual + taxAdvancesRemainingForecast;
   const profitAfterTax = operatingProfit - totalTaxAdvances;
 
   // ---- Loans ----
@@ -213,7 +232,7 @@ export const computeYearEndForecast = (
     operationalExpensesTotal,
     operatingProfit,
     taxAdvancesYTDActual,
-    taxAdvancesRemainingPending,
+    taxAdvancesRemainingForecast,
     totalTaxAdvances,
     profitAfterTax,
     loansYTDActual,
