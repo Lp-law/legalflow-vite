@@ -595,6 +595,70 @@ export const removeFromAutoFillBlacklist = (item: string): string[] => {
   return updated;
 };
 
+// --- Preferences sync (cloud snapshot helpers) ---
+// Collects every localStorage-only setting into a single object so it
+// can be persisted to the cloud snapshot, and applies a snapshot back
+// into localStorage. This keeps the user's medical tokens, autofill
+// blacklist, transaction-department overrides, forecast overrides etc.
+// in sync across devices alongside the transactions themselves.
+
+export type Preferences = {
+  userMedicalTokens?: string[];
+  userAutoFillBlacklist?: string[];
+  transactionDeptOverrides?: Record<string, TxDeptOverride>;
+  forecastItemOverrides?: Record<string, ForecastItemOverride>;
+  forecastMonthlyBuffer?: number;
+  forecastManualMonthlyTotal?: number;
+};
+
+export const collectPreferences = (): Preferences => ({
+  userMedicalTokens: getUserMedicalTokens(),
+  userAutoFillBlacklist: getUserAutoFillBlacklist(),
+  transactionDeptOverrides: getTransactionDeptOverrides(),
+  forecastItemOverrides: getForecastItemOverrides(),
+  forecastMonthlyBuffer: getForecastMonthlyBuffer(),
+  forecastManualMonthlyTotal: getForecastManualMonthlyTotal(),
+});
+
+const writeIfDifferent = (key: string, value: unknown) => {
+  const serialized = JSON.stringify(value);
+  if (localStorage.getItem(key) === serialized) return false;
+  localStorage.setItem(key, serialized);
+  return true;
+};
+
+export const applyPreferences = (prefs: Preferences | undefined | null): void => {
+  if (!prefs || typeof prefs !== 'object') return;
+  let changed = false;
+
+  if (Array.isArray(prefs.userMedicalTokens)) {
+    if (writeIfDifferent(STORAGE_KEY_MEDICAL_TOKENS, prefs.userMedicalTokens)) changed = true;
+  }
+  if (Array.isArray(prefs.userAutoFillBlacklist)) {
+    if (writeIfDifferent(STORAGE_KEY_AUTOFILL_BLACKLIST, prefs.userAutoFillBlacklist)) changed = true;
+  }
+  if (prefs.transactionDeptOverrides && typeof prefs.transactionDeptOverrides === 'object') {
+    if (writeIfDifferent(STORAGE_KEY_TX_DEPT_OVERRIDES, prefs.transactionDeptOverrides)) changed = true;
+  }
+  if (prefs.forecastItemOverrides && typeof prefs.forecastItemOverrides === 'object') {
+    if (writeIfDifferent(STORAGE_KEY_FORECAST_OVERRIDES, prefs.forecastItemOverrides)) changed = true;
+  }
+  if (typeof prefs.forecastMonthlyBuffer === 'number' && Number.isFinite(prefs.forecastMonthlyBuffer)) {
+    if (localStorage.getItem(STORAGE_KEY_FORECAST_BUFFER) !== String(prefs.forecastMonthlyBuffer)) {
+      localStorage.setItem(STORAGE_KEY_FORECAST_BUFFER, String(prefs.forecastMonthlyBuffer));
+      changed = true;
+    }
+  }
+  if (typeof prefs.forecastManualMonthlyTotal === 'number' && Number.isFinite(prefs.forecastManualMonthlyTotal)) {
+    if (localStorage.getItem(STORAGE_KEY_FORECAST_MANUAL_TOTAL) !== String(prefs.forecastManualMonthlyTotal)) {
+      localStorage.setItem(STORAGE_KEY_FORECAST_MANUAL_TOTAL, String(prefs.forecastManualMonthlyTotal));
+      changed = true;
+    }
+  }
+
+  if (changed) emitStorageChange('preferences_restored');
+};
+
 // --- Backup Logic ---
 
 export const exportBackupJSON = (transactions: Transaction[]) => {

@@ -64,12 +64,22 @@ const authorizedRequest = async <T>(
   });
 };
 
+// Free-form blob holding all client-side preferences that used to live
+// only in localStorage (medical tokens, autofill blacklist, dept
+// overrides, forecast overrides, etc.). The backend stores it as one
+// JSON row in the settings table - the schema is owned by the client
+// (storageService.collectPreferences/applyPreferences).
+export interface CloudPreferences {
+  [key: string]: unknown;
+}
+
 export interface CloudSnapshot {
   transactions: Transaction[];
   initialBalance: number;
   clients: string[];
   customCategories: Category[];
   loanOverrides: Record<string, number>;
+  preferences?: CloudPreferences;
   updatedAt: string;
 }
 

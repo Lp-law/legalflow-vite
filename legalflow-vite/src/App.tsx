@@ -18,6 +18,8 @@ import {
   replaceLoanOverrides,
   isLoanCategoryLabel,
   setTransactionDeptOverride,
+  collectPreferences,
+  applyPreferences,
 } from './services/storageService';
 import type { TxDeptOverride } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
@@ -513,6 +515,7 @@ const App: React.FC = () => {
         replaceClients(snapshot.clients ?? []);
         replaceCustomCategories(snapshot.customCategories ?? []);
         replaceLoanOverrides(snapshot.loanOverrides ?? {});
+        applyPreferences(snapshot.preferences);
         setInitialBalance(
           typeof snapshot.initialBalance === 'number'
             ? snapshot.initialBalance
@@ -550,6 +553,7 @@ const App: React.FC = () => {
       clients: getClients(),
       customCategories: getCustomCategories(),
       loanOverrides: getLoanOverrides(),
+      preferences: collectPreferences(),
       updatedAt: new Date().toISOString(),
     };
   }, [transactions, initialBalance]);
@@ -591,6 +595,31 @@ const App: React.FC = () => {
     if (!currentUser || !authToken || isRestoringFromCloud.current) return;
     performCloudSync();
   }, [transactions, initialBalance, currentUser, authToken, performCloudSync]);
+
+  // Also sync when preferences change (medical tokens, autofill blacklist,
+  // tx dept overrides, forecast overrides/buffer/manual total, etc.) so
+  // user-side settings stay in sync with the cloud.
+  useEffect(() => {
+    if (!currentUser || !authToken) return;
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<{ key: string }>;
+      const key = customEvent.detail?.key;
+      // Fire sync for preference-related storage changes (transactions/initialBalance
+      // already sync via the effect above)
+      if (
+        key === 'medical_tokens' ||
+        key === 'autofill_blacklist' ||
+        key === 'tx_dept_overrides' ||
+        key === 'forecast_item_overrides' ||
+        key === 'forecast_monthly_buffer' ||
+        key === 'forecast_manual_monthly_total'
+      ) {
+        if (!isRestoringFromCloud.current) performCloudSync();
+      }
+    };
+    window.addEventListener('legalflow:storage-changed', handler);
+    return () => window.removeEventListener('legalflow:storage-changed', handler);
+  }, [currentUser, authToken, performCloudSync]);
 
   useEffect(() => {
     setBalanceDraft(initialBalance.toString());
