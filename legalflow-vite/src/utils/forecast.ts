@@ -1,5 +1,6 @@
 import type { Transaction } from '../types';
 import { parseDateKey } from './date';
+import { normalizeForBucketKey } from './nextMonthAutoFill';
 
 export type ForecastResult = {
   asOfDate: Date;
@@ -17,6 +18,7 @@ export type ForecastResult = {
   operationalExpensesYTDActual: number; // all operational that already happened
   fixedExpensesYTDTotal: number; // only fixed (appears in >=50% of closed months)
   fixedExpenseDescriptions: string[];
+  excludedOneTimeDescriptions: Array<{ description: string; total: number; monthsAppeared: number }>;
   excludedOneTimeAmount: number;
   avgFixedMonthlyExpense: number;
   fixedExpensesRemainingForecast: number;
@@ -103,18 +105,21 @@ export const computeYearEndForecast = (
     0,
   );
 
-  // Identify fixed expenses: appear in >=50% of closed months
+  // Identify fixed expenses: appear in >=50% of closed months.
+  // Use the same aggressive normalization as auto-fill so that variants
+  // like "משכורות עובדים - ינואר" / "משכורות עובדים - פברואר" merge.
   const fixedThreshold = Math.max(1, Math.ceil(closedMonthsCount * 0.5));
   type Group = { months: Set<string>; total: number; description: string };
   const expenseBuckets = new Map<string, Group>();
   operationalYTD.forEach(t => {
-    const desc = (t.description || '').trim();
-    const cat = (t.category || '').trim();
-    const k = `${desc}|${cat}`;
+    const descKey = normalizeForBucketKey(t.description || '');
+    const catKey = normalizeForBucketKey(t.category || '');
+    const k = `${descKey}|${catKey}`;
     const tDate = parseDateKey(t.date);
     const mk = monthKeyOf(tDate);
     const existing = expenseBuckets.get(k);
     const amount = Math.abs(Number(t.amount) || 0);
+    const displayDesc = (t.description || '').trim() || (t.category || '').trim() || '(ללא תיאור)';
     if (existing) {
       existing.months.add(mk);
       existing.total += amount;
@@ -122,7 +127,7 @@ export const computeYearEndForecast = (
       expenseBuckets.set(k, {
         months: new Set([mk]),
         total: amount,
-        description: desc || cat || '(ללא תיאור)',
+        description: displayDesc,
       });
     }
   });
@@ -130,15 +135,22 @@ export const computeYearEndForecast = (
   let fixedExpensesYTDTotal = 0;
   let excludedOneTimeAmount = 0;
   const fixedExpenseDescriptions: string[] = [];
+  const excludedOneTimeDescriptions: Array<{ description: string; total: number; monthsAppeared: number }> = [];
   expenseBuckets.forEach(g => {
     if (g.months.size >= fixedThreshold) {
       fixedExpensesYTDTotal += g.total;
       fixedExpenseDescriptions.push(g.description);
     } else {
       excludedOneTimeAmount += g.total;
+      excludedOneTimeDescriptions.push({
+        description: g.description,
+        total: g.total,
+        monthsAppeared: g.months.size,
+      });
     }
   });
   fixedExpenseDescriptions.sort();
+  excludedOneTimeDescriptions.sort((a, b) => b.total - a.total);
 
   const avgFixedMonthlyExpense =
     closedMonthsCount > 0 ? fixedExpensesYTDTotal / closedMonthsCount : 0;
@@ -194,6 +206,7 @@ export const computeYearEndForecast = (
     operationalExpensesYTDActual,
     fixedExpensesYTDTotal,
     fixedExpenseDescriptions,
+    excludedOneTimeDescriptions,
     excludedOneTimeAmount,
     avgFixedMonthlyExpense,
     fixedExpensesRemainingForecast,

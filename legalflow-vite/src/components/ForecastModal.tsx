@@ -49,6 +49,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
   const today = useMemo(() => new Date(), []);
   const f = useMemo(() => computeYearEndForecast(transactions, today), [transactions, today]);
   const [showFixedList, setShowFixedList] = useState(false);
+  const [showExcludedList, setShowExcludedList] = useState(false);
 
   if (!isOpen) return null;
 
@@ -126,25 +127,49 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
               <div className="mt-4 pt-3 border-t border-emerald-200">
                 <Row label="רווח תפעולי צפוי לסוף שנה" value={f.operatingProfit} total />
               </div>
-              <div className="mt-3 text-[11px] text-emerald-800 bg-white/70 rounded p-2">
-                💡 הוצאות הוגדרו כ"קבועות" אם הופיעו ב-≥50% מ-{f.closedMonthsCount} החודשים שנסגרו (לפחות {Math.max(1, Math.ceil(f.closedMonthsCount * 0.5))} חודשים).
-                {' '}
-                הוצאות חד-פעמיות שלא הוכללו בצפי: <strong>{renderCurrency(f.excludedOneTimeAmount)}</strong>
-                {f.fixedExpenseDescriptions.length > 0 && (
-                  <>
-                    {' · '}
+              <div className="mt-3 text-[11px] text-emerald-800 bg-white/70 rounded p-2 space-y-2">
+                <div>
+                  💡 הוצאות "קבועות" = מופיעות ב-≥50% מ-{f.closedMonthsCount} החודשים שנסגרו (לפחות {Math.max(1, Math.ceil(f.closedMonthsCount * 0.5))} חודשים).
+                  ממוצע חודשי קבוע: <strong>{renderCurrency(f.avgFixedMonthlyExpense)}</strong>.
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {f.fixedExpenseDescriptions.length > 0 && (
                     <button onClick={() => setShowFixedList(s => !s)} className="text-blue-700 hover:underline">
-                      {showFixedList ? 'הסתר' : 'הצג'} {f.fixedExpenseDescriptions.length} הוצאות קבועות שזוהו
+                      {showFixedList ? '↑ הסתר' : '↓ הצג'} {f.fixedExpenseDescriptions.length} הוצאות שזוהו כקבועות
                     </button>
-                  </>
-                )}
+                  )}
+                  {f.excludedOneTimeDescriptions.length > 0 && (
+                    <button onClick={() => setShowExcludedList(s => !s)} className="text-amber-700 hover:underline">
+                      {showExcludedList ? '↑ הסתר' : '↓ הצג'} {f.excludedOneTimeDescriptions.length} הוצאות חד-פעמיות שהוצאו ({renderCurrency(f.excludedOneTimeAmount)})
+                    </button>
+                  )}
+                </div>
                 {showFixedList && (
-                  <div className="mt-2 flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {f.fixedExpenseDescriptions.map(d => (
                       <span key={d} className="inline-block text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
                         {d}
                       </span>
                     ))}
+                  </div>
+                )}
+                {showExcludedList && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-amber-700 font-semibold">הוצאות שהופיעו רק ב-{Math.max(1, Math.ceil(f.closedMonthsCount * 0.5)) - 1} חודשים או פחות (חד-פעמיות):</p>
+                    <table className="w-full text-[10px]">
+                      <tbody>
+                        {f.excludedOneTimeDescriptions.map(item => (
+                          <tr key={item.description} className="border-t border-amber-200">
+                            <td className="py-1">{item.description}</td>
+                            <td className="py-1 text-amber-700">{item.monthsAppeared}/{f.closedMonthsCount} חודשים</td>
+                            <td className="py-1 text-left font-bold text-amber-900">{renderCurrency(item.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="text-[10px] text-amber-700 italic">
+                      אם משהו ברשימה הזו אמור להיות "קבוע" - תיתכן שיש בתיאור וריאציות שלא זוהו כזהות. אפשר לאחד אותן ידנית בתזרים.
+                    </p>
                   </div>
                 )}
               </div>

@@ -38,7 +38,7 @@ const HEBREW_MONTHS = [
   'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
 ];
 
-const normalizeForBucketKey = (s: string | undefined | null): string => {
+export const normalizeForBucketKey = (s: string | undefined | null): string => {
   if (!s) return '';
   let result = s.toLowerCase();
   // Remove year tokens (1900-2099)
