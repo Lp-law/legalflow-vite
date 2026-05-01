@@ -131,13 +131,18 @@ export const computeNextMonthSuggestions = (
   const fullBlacklist = [...DEFAULT_AUTOFILL_BLACKLIST, ...userBlacklist];
   const targetMonthKey = `${target.year}-${String(target.month + 1).padStart(2, '0')}`;
 
-  // Determine the 3 lookback months (calendar months immediately preceding target)
+  // Lookback = all closed months in the current calendar year
+  // (months strictly before today's month).
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonthIdx = today.getMonth();
   const lookbackKeys: string[] = [];
-  for (let i = 1; i <= 3; i += 1) {
-    const d = new Date(target.year, target.month - i, 1);
+  for (let m = 0; m < currentMonthIdx; m += 1) {
+    const d = new Date(currentYear, m, 1);
     lookbackKeys.push(monthKey(d));
   }
   const lookbackSet = new Set(lookbackKeys);
+  const requiredMonthsCount = lookbackKeys.length;
 
   type Occurrence = { day: number; amount: number; date: Date };
   type Bucket = {
@@ -227,6 +232,9 @@ export const computeNextMonthSuggestions = (
           slotMonthKeys.push(mKey);
         }
       });
+      // Strict mode: only emit a slot if it has an entry in EVERY closed
+      // month of the current year. If even one month is missing, drop it.
+      if (requiredMonthsCount > 0 && slotEntries.length < requiredMonthsCount) continue;
       if (slotEntries.length === 0) continue;
 
       const avgDay = Math.round(slotEntries.reduce((s, x) => s + x.day, 0) / slotEntries.length);
@@ -279,11 +287,16 @@ export const formatTargetMonthLabel = (target: { year: number; month: number }):
   return date.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 };
 
-export const formatLookbackLabel = (target: { year: number; month: number }): string => {
+export const formatLookbackLabel = (
+  _target: { year: number; month: number },
+  today: Date = new Date(),
+): string => {
+  const currentYear = today.getFullYear();
+  const currentMonthIdx = today.getMonth();
   const labels: string[] = [];
-  for (let i = 3; i >= 1; i -= 1) {
-    const d = new Date(target.year, target.month - i, 1);
+  for (let m = 0; m < currentMonthIdx; m += 1) {
+    const d = new Date(currentYear, m, 1);
     labels.push(d.toLocaleDateString('he-IL', { month: 'long' }));
   }
-  return labels.join(' / ');
+  return labels.length > 0 ? labels.join(' / ') : 'אין חודשים שנסגרו השנה';
 };
