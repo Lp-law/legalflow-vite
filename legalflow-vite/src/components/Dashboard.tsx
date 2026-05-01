@@ -268,9 +268,10 @@ const Dashboard: React.FC<DashboardProps> = ({
           income += absAmount;
         } else if (t.group === 'bank_adjustment') {
           if (amount > 0) income += amount;
-          else expenses += Math.abs(amount);
-        } else {
-          // operational, tax, loan, personal
+          // התאמות בנק שליליות אינן הוצאה תפעולית - לא נכללות
+        } else if (t.group === 'operational') {
+          // רווח תפעולי = הכנסות פחות הוצאות תפעוליות בלבד
+          // (מיסים, הלוואות ומשיכות אינן הוצאות תפעוליות)
           expenses += absAmount;
         }
       });
@@ -419,7 +420,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           accentTextClass="text-red-300"
           subtitle={
             ytdData.hasData
-              ? `מ-1.1.${today.getFullYear()} עד ${endOfPrevMonth.toLocaleDateString('he-IL')}`
+              ? `הוצאות תפעוליות בלבד | מ-1.1.${today.getFullYear()} עד ${endOfPrevMonth.toLocaleDateString('he-IL')}`
               : 'אין חודש שנסגר עדיין השנה'
           }
         />
