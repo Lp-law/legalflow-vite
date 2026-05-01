@@ -33,6 +33,8 @@ const MEDICAL_NEGLIGENCE_TOKENS: string[] = [
   'אדנטיקה',
   'איגור חייקין', 'חייקין',
   'שיפי גיטר',
+  'שכ"ט פקדונות', 'שכט פקדונות', 'פקדונות',
+  'ריטיינר לאון', 'לאון',
 ];
 
 type Department = 'medical' | 'civil';
