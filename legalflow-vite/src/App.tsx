@@ -37,6 +37,7 @@ import DepartmentBreakdownModal from './components/DepartmentBreakdownModal';
 import ExpenseSearchModal from './components/ExpenseSearchModal';
 import NextMonthAutoFillModal from './components/NextMonthAutoFillModal';
 import { formatTargetMonthLabel, getDefaultTargetMonth } from './utils/nextMonthAutoFill';
+import ForecastModal from './components/ForecastModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -168,6 +169,7 @@ const App: React.FC = () => {
   const [isDepartmentBreakdownOpen, setIsDepartmentBreakdownOpen] = useState(false);
   const [isExpenseSearchOpen, setIsExpenseSearchOpen] = useState(false);
   const [isAutoFillOpen, setIsAutoFillOpen] = useState(false);
+  const [isForecastOpen, setIsForecastOpen] = useState(false);
   const nextMonthLabel = useMemo(() => formatTargetMonthLabel(getDefaultTargetMonth()), []);
   const handleOpenDailyWhatsappSummary = useCallback(() => {
     const summary = buildDailyWhatsappSummary(transactions, initialBalance, new Date());
@@ -858,6 +860,13 @@ useEffect(() => {
             לוח בקרה
           </button>
           <button
+            onClick={() => setIsForecastOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-slate-400 hover:bg-white/5"
+          >
+            <FileText className="w-5 h-5" />
+            תחזית
+          </button>
+          <button
             onClick={() => setIsDepartmentBreakdownOpen(true)}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-slate-400 hover:bg-white/5"
           >
@@ -1043,6 +1052,11 @@ useEffect(() => {
         onClose={() => setIsAutoFillOpen(false)}
         transactions={transactions}
         onConfirm={(newTransactions) => handleAddTransactionBatch(newTransactions)}
+      />
+      <ForecastModal
+        isOpen={isForecastOpen}
+        onClose={() => setIsForecastOpen(false)}
+        transactions={transactions}
       />
 
       {/* Mobile Bottom Nav */}
