@@ -147,28 +147,36 @@ export const computeYearEndForecast = (
   );
 
   // Identify fixed expenses: appear in >=50% of closed months.
-  // Use the same aggressive normalization as auto-fill so that variants
-  // like "משכורות עובדים - ינואר" / "משכורות עובדים - פברואר" merge.
+  // Bucket primarily by CATEGORY (when set) so that e.g. "משכורות עובדים"
+  // category collapses all per-employee/per-month variants into one
+  // bucket. Fall back to description when category is empty.
   const fixedThreshold = Math.max(1, Math.ceil(closedMonthsCount * 0.5));
   type Group = { months: Set<string>; total: number; description: string };
   const expenseBuckets = new Map<string, Group>();
   operationalYTD.forEach(t => {
-    const descKey = normalizeForBucketKey(t.description || '');
-    const catKey = normalizeForBucketKey(t.category || '');
-    const k = `${descKey}|${catKey}`;
+    const cat = (t.category || '').trim();
+    const desc = (t.description || '').trim();
+    let bucketKey: string;
+    let displayName: string;
+    if (cat) {
+      bucketKey = `cat:${normalizeForBucketKey(cat)}|${t.group}`;
+      displayName = cat;
+    } else {
+      bucketKey = `desc:${normalizeForBucketKey(desc)}|${t.group}`;
+      displayName = desc || '(ללא תיאור)';
+    }
     const tDate = parseDateKey(t.date);
     const mk = monthKeyOf(tDate);
-    const existing = expenseBuckets.get(k);
+    const existing = expenseBuckets.get(bucketKey);
     const amount = Math.abs(Number(t.amount) || 0);
-    const displayDesc = (t.description || '').trim() || (t.category || '').trim() || '(ללא תיאור)';
     if (existing) {
       existing.months.add(mk);
       existing.total += amount;
     } else {
-      expenseBuckets.set(k, {
+      expenseBuckets.set(bucketKey, {
         months: new Set([mk]),
         total: amount,
-        description: displayDesc,
+        description: displayName,
       });
     }
   });
