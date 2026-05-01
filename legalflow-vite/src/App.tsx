@@ -18,6 +18,7 @@ import {
   replaceLoanOverrides,
   isLoanCategoryLabel,
   setTransactionDeptOverride,
+  removeTransactionDeptOverride,
   collectPreferences,
   applyPreferences,
 } from './services/storageService';
@@ -51,7 +52,16 @@ const BACKUP_SESSION_KEY = 'legalflow_backup_done_for_session';
 const normalizeTransactionDates = (list: Transaction[]) => {
   let didNormalize = false;
   const normalized = list.map(transaction => {
-    const normalizedDate = formatDateKey(parseDateKey(transaction.date));
+    const parsed = parseDateKey(transaction.date);
+    // If the date can't be parsed, keep the original string instead of
+    // silently rewriting it to today (or to "NaN-NaN-NaN"). The transaction
+    // will likely surface elsewhere (validation, manual cleanup) but at
+    // least we don't corrupt the user's record.
+    if (Number.isNaN(parsed.getTime())) {
+      console.warn('Skipping date normalization for unparseable date', transaction.id, transaction.date);
+      return transaction;
+    }
+    const normalizedDate = formatDateKey(parsed);
     if (normalizedDate !== transaction.date) {
       didNormalize = true;
       return { ...transaction, date: normalizedDate };
@@ -362,6 +372,9 @@ const App: React.FC = () => {
       if (target?.group === 'loan') {
         removeLoanOverride(id);
       }
+      // Also clear any per-transaction department override so localStorage
+      // doesn't accumulate orphaned entries for deleted ids.
+      removeTransactionDeptOverride(id);
       setPendingDeletionId(null);
     }, 280);
   };
@@ -462,15 +475,22 @@ const App: React.FC = () => {
   };
 
   const calculateCurrentBalance = () => {
-    const income = transactions
-      .filter(t => t.type === 'income' && t.status === 'completed')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const expenses = transactions
-      .filter(t => t.type === 'expense' && t.status === 'completed')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    return initialBalance + income - expenses;
+    // bank_adjustment rows preserve their sign in storage (positive = credit,
+    // negative = debit). They must be added with their raw signed amount,
+    // NOT branched on type, otherwise a -1500 correction is subtracted as
+    // "expense" and ends up adding +1500 to the balance.
+    let total = initialBalance;
+    transactions.forEach(t => {
+      if (t.status !== 'completed') return;
+      if (t.group === 'bank_adjustment') {
+        total += Number(t.amount) || 0;
+        return;
+      }
+      const amt = Math.abs(Number(t.amount) || 0);
+      if (t.type === 'income') total += amt;
+      else if (t.type === 'expense') total -= amt;
+    });
+    return total;
   };
 
   const currentBalanceValue = useMemo(

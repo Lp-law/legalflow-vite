@@ -267,8 +267,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     // For manual tax/vat entries, we want to mark them as manual overrides so the auto-calc doesn't revert them
     // If user manually adds an expense in 'tax' group, we flag it.
-    const isManualOverride = group === 'tax';
-
     const parsedAmount = sanitizeNumericInput(amount);
     if (!Number.isFinite(parsedAmount)) {
       alert('נא להזין סכום חוקי (מספרים, נקודה או פסיק).');
@@ -284,6 +282,25 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     const absoluteAmount = Math.abs(parsedAmount);
     const effectiveAmount = group === 'bank_adjustment' ? parsedAmount : absoluteAmount;
+
+    // Mark as manual override ONLY when:
+    //  - creating a NEW tax row (user is committing to a custom value), OR
+    //  - editing an existing tax row AND the amount actually changed (so
+    //    syncTaxTransactions stops re-syncing this specific row).
+    // Editing only the description/date should NOT freeze the auto-sync.
+    let isManualOverride = false;
+    if (group === 'tax') {
+      if (!transactionToEdit) {
+        isManualOverride = true;
+      } else {
+        const previousAmount = Math.abs(Number(transactionToEdit.amount) || 0);
+        if (Math.abs(previousAmount - absoluteAmount) > 0.005) {
+          isManualOverride = true;
+        } else {
+          isManualOverride = Boolean(transactionToEdit.isManualOverride);
+        }
+      }
+    }
 
     if (transactionToEdit && onSubmitEdit) {
       const editedTransaction: Transaction = {
@@ -739,7 +756,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                 min="2" 
                                 max="60" 
                                 value={recurringMonths}
-                                onChange={(e) => setRecurringMonths(parseInt(e.target.value, 10))}
+                                onChange={(e) => {
+                                  const parsed = parseInt(e.target.value, 10);
+                                  setRecurringMonths(Number.isFinite(parsed) && parsed > 0 ? parsed : 1);
+                                }}
                                 className={`w-16 ${lightInputCompactClasses} text-center`}
                              />
                              <span className="text-sm text-blue-700">חודשים</span>

@@ -140,7 +140,10 @@ export const saveTransactions = (transactions: Transaction[]) => {
 export const getInitialBalance = (): number => {
   const stored = localStorage.getItem(STORAGE_KEY_INITIAL_BALANCE);
   if (stored) {
-    return parseFloat(stored);
+    const parsed = parseFloat(stored);
+    // Guard against NaN - a corrupted/empty stored value would otherwise
+    // poison every balance and forecast calculation downstream.
+    return Number.isFinite(parsed) ? parsed : INITIAL_BALANCE;
   }
   return INITIAL_BALANCE;
 };

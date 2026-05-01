@@ -89,16 +89,18 @@ export type ForecastResult = {
 const monthKeyOf = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
-// Income tax advance recognition - lenient match by category OR description
-// to catch user-edited categories like "מס הכנסה" / "מקדמת מס" / etc.
+// Income tax advance recognition - explicit whitelist of category/description
+// patterns. Using a negation rule ("anything not VAT") accidentally swept in
+// unrelated tax-group rows like ביטוח לאומי or arnona payments.
 const isIncomeTaxAdvance = (t: Transaction): boolean => {
   if (t.group !== 'tax') return false;
   const cat = t.category || '';
-  if (cat.includes('מס הכנסה') || cat.includes('מקדמ')) return true;
   const desc = t.description || '';
+  // Match income tax explicitly. Other tax-group rows (VAT, social
+  // security, arnona, etc.) do not count toward income-tax forecast.
+  if (cat.includes('מס הכנסה')) return true;
+  if (cat === 'מקדמת מס' || cat === 'מקדמות מס') return true;
   if (desc.includes('מקדמות מס') || desc.includes('מקדמת מס')) return true;
-  // Anything else in tax group that is NOT VAT counts as income tax
-  if (!cat.includes('מע"מ') && !cat.includes('מעמ') && !desc.includes('מע"מ')) return true;
   return false;
 };
 
@@ -236,10 +238,12 @@ export const computeYearEndForecast = (
   const avgFixedMonthlyExpense = totalEffectiveMonthlyForFixed;
   const monthlyBufferAmount = Number.isFinite(monthlyBuffer) && monthlyBuffer > 0 ? monthlyBuffer : 0;
 
-  // If user provided a manual monthly total, use it directly (overrides
-  // both detected sum and buffer). Otherwise use detected + buffer.
+  // If user provided a manual monthly total > 0, use it directly (overrides
+  // both detected sum and buffer). A value of 0 is treated as "unset" -
+  // typing 0 in the input falls back to the auto-detected sum + buffer
+  // rather than silently zeroing the entire expense projection.
   const useManualTotal =
-    typeof manualMonthlyTotal === 'number' && Number.isFinite(manualMonthlyTotal) && manualMonthlyTotal >= 0;
+    typeof manualMonthlyTotal === 'number' && Number.isFinite(manualMonthlyTotal) && manualMonthlyTotal > 0;
   const effectiveMonthlyExpense = useManualTotal
     ? manualMonthlyTotal!
     : avgFixedMonthlyExpense + monthlyBufferAmount;

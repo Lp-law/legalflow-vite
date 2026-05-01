@@ -237,7 +237,12 @@ export const computeNextMonthSuggestions = (
       });
       // Strict mode: only emit a slot if it has an entry in EVERY closed
       // month of the current year. If even one month is missing, drop it.
-      if (requiredMonthsCount > 0 && slotEntries.length < requiredMonthsCount) continue;
+      // SAFETY: when there are fewer than 2 closed months (Jan/early Feb),
+      // a single occurrence would otherwise become a "recurring" suggestion.
+      // Require at least 2 closed months before the strict-equality check
+      // can call something fixed - otherwise refuse to suggest.
+      if (requiredMonthsCount < 2) continue;
+      if (slotEntries.length < requiredMonthsCount) continue;
       if (slotEntries.length === 0) continue;
 
       const avgDay = Math.round(slotEntries.reduce((s, x) => s + x.day, 0) / slotEntries.length);
