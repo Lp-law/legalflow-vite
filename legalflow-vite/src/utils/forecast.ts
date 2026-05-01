@@ -138,11 +138,8 @@ export const computeYearEndForecast = (
   const incomeRemainingForecast = avgMonthlyIncome * remainingMonthsCount;
   const incomeTotal = incomeYTDActual + incomeRemainingForecast;
 
-  // ---- Recurring business expenses for F1 ----
-  // Includes both operational and personal-group items.
-  const operationalYTD = ytdCompleted.filter(
-    t => t.group === 'operational' || t.group === 'personal',
-  );
+  // ---- Operational expenses only (no personal withdrawals) ----
+  const operationalYTD = ytdCompleted.filter(t => t.group === 'operational');
   const operationalExpensesYTDActual = operationalYTD.reduce(
     (s, t) => s + Math.abs(Number(t.amount) || 0),
     0,
@@ -255,13 +252,19 @@ export const computeYearEndForecast = (
   const loansRemainingForecast = avgMonthlyLoans * remainingMonthsCount;
   const totalLoans = loansYTDActual + loansRemainingForecast;
 
-  // ---- Personal withdrawals: removed from forecast ----
-  // F3 only subtracts loans. Personal items are already counted in F1.
-  const withdrawalsYTDActual = 0;
-  const withdrawalsRemainingForecast = 0;
-  const totalWithdrawals = 0;
+  // ---- Personal withdrawals (subtracted in F3) ----
+  // Linear projection from YTD average.
+  const withdrawalsYTDActual = ytdCompleted
+    .filter(t => t.group === 'personal')
+    .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
+  const avgMonthlyWithdrawals =
+    closedMonthsCount > 0 ? withdrawalsYTDActual / closedMonthsCount : 0;
+  const withdrawalsRemainingForecast =
+    avgMonthlyWithdrawals * remainingMonthsCount;
+  const totalWithdrawals = withdrawalsYTDActual + withdrawalsRemainingForecast;
 
   const netCashFlowEoY = profitAfterTax - totalLoans - totalWithdrawals;
+  // (totalWithdrawals = personal-group spending, kept separate from F1 operational)
 
   return {
     asOfDate: today,

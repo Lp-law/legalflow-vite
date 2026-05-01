@@ -181,11 +181,11 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                   <Row label="סה״כ הכנסות צפויות" value={f.incomeTotal} bold />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-sm font-semibold text-emerald-800 mb-2">הוצאות קבועות (תפעולי + פרטי)</h4>
+                  <h4 className="text-sm font-semibold text-emerald-800 mb-2">הוצאות תפעוליות</h4>
                   <Row
                     label="הוצאות בפועל YTD"
                     value={f.operationalExpensesYTDActual}
-                    hint="כל ההוצאות התפעוליות + משיכות פרטיות שכבר ירדו"
+                    hint="רק קבוצת operational. משיכות פרטיות יורדות ב-תחזית 3."
                     negative
                   />
                   <Row
@@ -412,7 +412,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
             <section className="border border-violet-200 rounded-xl bg-violet-50/30 p-5">
               <h3 className="text-lg font-bold text-violet-900 flex items-center gap-2 mb-4">
                 <TrendingDown className="w-5 h-5" />
-                תחזית 3: תזרים נטו לסוף שנה (אחרי הלוואות)
+                תחזית 3: תזרים נטו לסוף שנה (אחרי הלוואות + משיכות)
               </h3>
               <div className="space-y-1">
                 <Row label="רווח לאחר מס (משוער)" value={f.profitAfterTax} bold />
@@ -423,12 +423,19 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                   hint={`ממוצע ${renderCurrency(f.loansYTDActual / Math.max(1, f.closedMonthsCount))} × ${f.remainingMonthsCount} חודשים`}
                   negative
                 />
+                <Row label="משיכות פרטיות שולמו YTD" value={f.withdrawalsYTDActual} negative />
+                <Row
+                  label="משיכות פרטיות צפויות"
+                  value={f.withdrawalsRemainingForecast}
+                  hint={`ממוצע ${renderCurrency(f.withdrawalsYTDActual / Math.max(1, f.closedMonthsCount))} × ${f.remainingMonthsCount} חודשים`}
+                  negative
+                />
               </div>
               <div className="mt-4 pt-3 border-t border-violet-200">
                 <Row label="תזרים נטו ב-31.12 (כמה יישאר)" value={f.netCashFlowEoY} total />
               </div>
               <div className="mt-3 text-[11px] text-violet-800 bg-white/70 rounded p-2">
-                💰 משיכות פרטיות (כולל מזונות וקה"ש/פנסיה אישית) כבר נכללות בתחזית 1 כהוצאות קבועות. תחזית 3 מורידה רק החזרי הלוואות (קרן + ריבית).
+                💰 כולל קרן + ריבית של הלוואות וכל המשיכות הפרטיות (קבוצת personal). אם פנסיה ליאור או קה"ש שלך מסווגים כ-personal ואתה רוצה לכלול אותם בהוצאות התפעוליות, ערוך את התנועות ל-group=operational.
               </div>
             </section>
           </div>
