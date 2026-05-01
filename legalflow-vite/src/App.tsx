@@ -391,6 +391,25 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateTransactionDate = (transactionId: string, nextDate: string) => {
+    if (!nextDate) return;
+    const parsed = parseDateKey(nextDate);
+    if (Number.isNaN(parsed.getTime())) return;
+    const normalizedDate = formatDateKey(parsed);
+
+    let didUpdate = false;
+    const updatedList = transactions.map(t => {
+      if (t.id !== transactionId) return t;
+      if (t.date === normalizedDate) return t;
+      didUpdate = true;
+      return { ...t, date: normalizedDate };
+    });
+
+    if (didUpdate) {
+      updateTransactionsWithSync(updatedList);
+    }
+  };
+
   const openTransactionForm = (date?: string, type?: 'income' | 'expense', group?: TransactionGroup) => {
     setTransactionBeingEdited(null);
     setFormInitialDate(date || formatDateKey(new Date()));
@@ -918,6 +937,7 @@ useEffect(() => {
               onToggleStatus={handleToggleTransactionStatus}
               onUpdateTaxAmount={handleUpdateTaxAmount}
               onUpdateLoanAmount={handleUpdateLoanAmount}
+              onUpdateTransactionDate={handleUpdateTransactionDate}
               recentTransactionIds={recentTransactionIds}
               deletingTransactionId={pendingDeletionId}
               systemToolsToolbar={

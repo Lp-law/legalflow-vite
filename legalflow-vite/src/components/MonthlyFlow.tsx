@@ -17,6 +17,7 @@ interface MonthlyFlowProps {
   onToggleStatus: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount: (id: string, amount: number) => void;
   onUpdateLoanAmount: (id: string, amount: number) => void;
+  onUpdateTransactionDate: (id: string, newDate: string) => void;
   systemToolsToolbar?: ReactNode;
   recentTransactionIds?: string[];
   deletingTransactionId?: string | null;
@@ -64,6 +65,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
   onToggleStatus,
   onUpdateTaxAmount,
   onUpdateLoanAmount,
+  onUpdateTransactionDate,
   recentTransactionIds,
   deletingTransactionId,
   systemToolsToolbar,
@@ -853,6 +855,7 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
         onToggleStatus={onToggleStatus}
         onUpdateTaxAmount={onUpdateTaxAmount}
         onUpdateLoanAmount={onUpdateLoanAmount}
+        onUpdateDate={onUpdateTransactionDate}
       />
     )}
     {cellTooltip.visible &&

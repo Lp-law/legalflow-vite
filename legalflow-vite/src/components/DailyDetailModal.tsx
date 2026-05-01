@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Pencil } from 'lucide-react';
+import { X, Trash2, Plus, Pencil, Calendar } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
 import { lightInputCompactClasses } from './ui/inputStyles';
 
@@ -15,6 +15,7 @@ interface DailyDetailModalProps {
   onToggleStatus?: (id: string, nextStatus: 'pending' | 'completed') => void;
   onUpdateTaxAmount?: (id: string, amount: number) => void;
   onUpdateLoanAmount?: (id: string, amount: number) => void;
+  onUpdateDate?: (id: string, newDate: string) => void;
 }
 
 const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
@@ -28,7 +29,8 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
   onEdit,
   onToggleStatus,
   onUpdateTaxAmount,
-  onUpdateLoanAmount
+  onUpdateLoanAmount,
+  onUpdateDate
 }) => {
   if (!isOpen) return null;
 
@@ -36,6 +38,8 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
   const [taxDraft, setTaxDraft] = useState('');
   const [editingLoanTransactionId, setEditingLoanTransactionId] = useState<string | null>(null);
   const [loanDraft, setLoanDraft] = useState('');
+  const [editingDateTransactionId, setEditingDateTransactionId] = useState<string | null>(null);
+  const [dateDraft, setDateDraft] = useState('');
 
   const formattedDate = new Date(date).toLocaleDateString('he-IL', {
     weekday: 'long',
@@ -125,6 +129,26 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
     cancelLoanEdit();
   };
 
+  const startDateEdit = (transaction: Transaction) => {
+    setEditingDateTransactionId(transaction.id);
+    setDateDraft(transaction.date);
+  };
+
+  const cancelDateEdit = () => {
+    setEditingDateTransactionId(null);
+    setDateDraft('');
+  };
+
+  const handleSaveDate = (transactionId: string) => {
+    if (!onUpdateDate) return;
+    if (!dateDraft) {
+      alert('נא לבחור תאריך');
+      return;
+    }
+    onUpdateDate(transactionId, dateDraft);
+    cancelDateEdit();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 modal-overlay">
       <div className="bg-[#0b1426] text-slate-100 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-white/10 modal-content">
@@ -170,6 +194,41 @@ const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
                   </div>
                   <p className="text-sm text-slate-200 font-medium">{t.description}</p>
                   <p className="text-xs text-slate-400">{t.category}</p>
+                  {onUpdateDate && (
+                    editingDateTransactionId === t.id ? (
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <input
+                          type="date"
+                          value={dateDraft}
+                          onChange={(e) => setDateDraft(e.target.value)}
+                          className={`${lightInputCompactClasses} w-auto`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveDate(t.id)}
+                          className="px-3 py-1 text-xs font-semibold rounded bg-emerald-600 text-white hover:bg-emerald-500"
+                        >
+                          שמור
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelDateEdit}
+                          className="px-3 py-1 text-xs font-semibold rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        >
+                          בטל
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startDateEdit(t)}
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-300 hover:text-blue-200 underline-offset-2"
+                      >
+                        <Calendar className="w-3 h-3" />
+                        שנה תאריך
+                      </button>
+                    )
+                  )}
                   {group === 'tax' && (t.category === 'מע"מ' || t.category === 'מס הכנסה אישי') && onUpdateTaxAmount && (
                     editingTaxTransactionId === t.id ? (
                       <div className="mt-3 space-y-2">
