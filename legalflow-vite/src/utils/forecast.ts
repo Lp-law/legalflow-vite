@@ -123,7 +123,12 @@ export const computeYearEndForecast = (
   const closedMonthsCount = currentMonthIndex;
   const remainingMonthsCount = 12 - closedMonthsCount;
 
-  // Build YTD-completed and remaining buckets
+  // Build YTD and remaining buckets.
+  // For past closed months we include ALL transactions (completed + pending)
+  // so the YTD numbers match what the cashflow grid footer shows. Any
+  // pending entry in a closed month represents a committed obligation
+  // for that month that the user simply hasn't toggled to "completed"
+  // yet, and excluding it would understate the month's totals.
   const ytdCompleted: Transaction[] = [];
   const remainingAll: Transaction[] = [];
 
@@ -132,7 +137,7 @@ export const computeYearEndForecast = (
     const ts = d.getTime();
     if (d < startOfYear || ts > endOfYearMs) return;
     if (ts <= endOfPrevMonthMs) {
-      if (t.status === 'completed') ytdCompleted.push(t);
+      ytdCompleted.push(t);
     } else if (ts >= startOfCurrentMonth) {
       remainingAll.push(t);
     }
