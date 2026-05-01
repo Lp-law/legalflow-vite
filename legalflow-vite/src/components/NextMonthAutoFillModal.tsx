@@ -1,14 +1,21 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { X, Wand2, AlertCircle } from 'lucide-react';
+import { X, Wand2, AlertCircle, Ban } from 'lucide-react';
 import type { Transaction, TransactionGroup } from '../types';
 import {
   computeNextMonthSuggestions,
   getDefaultTargetMonth,
   formatTargetMonthLabel,
   formatLookbackLabel,
+  DEFAULT_AUTOFILL_BLACKLIST,
   type AutoFillSuggestion,
 } from '../utils/nextMonthAutoFill';
 import { lightInputCompactClasses } from './ui/inputStyles';
+import {
+  getUserAutoFillBlacklist,
+  addToAutoFillBlacklist,
+  removeFromAutoFillBlacklist,
+  STORAGE_EVENT,
+} from '../services/storageService';
 
 interface NextMonthAutoFillModalProps {
   isOpen: boolean;
@@ -51,10 +58,18 @@ const NextMonthAutoFillModal: React.FC<NextMonthAutoFillModalProps> = ({
   const target = useMemo(() => getDefaultTargetMonth(), []);
   const targetLabel = useMemo(() => formatTargetMonthLabel(target), [target]);
   const lookbackLabel = useMemo(() => formatLookbackLabel(target), [target]);
+  const [userBlacklist, setUserBlacklist] = useState<string[]>(() => getUserAutoFillBlacklist());
+  const [showBlacklistManager, setShowBlacklistManager] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setUserBlacklist(getUserAutoFillBlacklist());
+    window.addEventListener(STORAGE_EVENT, handler);
+    return () => window.removeEventListener(STORAGE_EVENT, handler);
+  }, []);
 
   const suggestions = useMemo(
-    () => computeNextMonthSuggestions(transactions, target),
-    [transactions, target],
+    () => computeNextMonthSuggestions(transactions, target, userBlacklist),
+    [transactions, target, userBlacklist],
   );
 
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -92,6 +107,17 @@ const NextMonthAutoFillModal: React.FC<NextMonthAutoFillModalProps> = ({
 
   const updateDate = (key: string, value: string) => {
     setEdited(prev => ({ ...prev, [key]: { ...prev[key], date: value } }));
+  };
+
+  const handleBlacklist = (description: string) => {
+    if (!description.trim()) return;
+    addToAutoFillBlacklist(description.trim());
+    setUserBlacklist(getUserAutoFillBlacklist());
+  };
+
+  const handleUnblacklist = (item: string) => {
+    removeFromAutoFillBlacklist(item);
+    setUserBlacklist(getUserAutoFillBlacklist());
   };
 
   const selectedSuggestions = suggestions.filter(s => selectedKeys.has(s.key));
@@ -177,6 +203,7 @@ const NextMonthAutoFillModal: React.FC<NextMonthAutoFillModalProps> = ({
                     <th className="text-right px-3 py-2 font-medium">סכום מוצע</th>
                     <th className="text-right px-3 py-2 font-medium">הופיע ב</th>
                     <th className="text-right px-3 py-2 font-medium">טווח סכומים</th>
+                    <th className="text-center px-3 py-2 font-medium w-24">פעולה</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -233,12 +260,71 @@ const NextMonthAutoFillModal: React.FC<NextMonthAutoFillModalProps> = ({
                           {s.monthsAppeared.length}/3 חודשים
                         </td>
                         <td className="px-3 py-2 text-xs text-slate-500">{formatRange(s)}</td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleBlacklist(s.description)}
+                            className="text-[11px] inline-flex items-center gap-1 text-slate-500 hover:text-rose-700"
+                            title="אל תציע יותר את התיאור הזה (אפשר לבטל מהניהול למטה)"
+                          >
+                            <Ban className="w-3 h-3" />
+                            אל תציע
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+
+            <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/30 text-xs text-slate-500 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                סינון אוטומטי פעיל: {DEFAULT_AUTOFILL_BLACKLIST.length} תיאורים מובנים + {userBlacklist.length} משתמש.
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBlacklistManager(prev => !prev)}
+                className="text-blue-600 hover:text-blue-800 font-semibold"
+              >
+                {showBlacklistManager ? 'הסתר ניהול חסימות' : 'נהל רשימת חסימות'}
+              </button>
+            </div>
+
+            {showBlacklistManager && (
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/60 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 mb-2">חסומים מובנים (לא ניתן להסיר):</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DEFAULT_AUTOFILL_BLACKLIST.map(item => (
+                      <span key={item} className="inline-block text-[11px] px-2 py-0.5 rounded bg-slate-200 text-slate-600">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {userBlacklist.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 mb-2">חסומים שלך ({userBlacklist.length}) - לחץ X להסיר:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {userBlacklist.map(item => (
+                        <span key={item} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-rose-100 text-rose-700">
+                          {item}
+                          <button
+                            type="button"
+                            onClick={() => handleUnblacklist(item)}
+                            className="hover:text-rose-900"
+                            aria-label="הסר מרשימה"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="p-6 border-t border-slate-100 bg-slate-50/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="text-slate-700 text-sm">

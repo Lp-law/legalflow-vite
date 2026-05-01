@@ -3,6 +3,40 @@ import { formatDateKey, parseDateKey } from './date';
 
 const RECURRING_GROUPS: TransactionGroup[] = ['operational', 'loan', 'personal'];
 
+// Default tokens (substrings) to NEVER suggest when filling next month.
+// These are typically one-off purchases or descriptions the user marked
+// as not recurring. The user can extend this list at runtime via
+// addToAutoFillBlacklist() in storageService.
+export const DEFAULT_AUTOFILL_BLACKLIST: string[] = [
+  'אייפד',
+  'iPad',
+  'חיובי חו"ל',
+  'חיובי חוץ',
+  'היימן',
+  'קומפלקס כימיקלים',
+  'להבין על מה ההוצאה מול ליאור',
+  'מונית ולדה',
+  'מחשב נייח - נויה',
+  'מסלול ערוץ',
+  'נסיעות - מוניות',
+  'ריבית רבעונית',
+  'ISO 27001',
+  'iso27001',
+];
+
+const normalize = (value: string | undefined | null) =>
+  (value || '')
+    .toLowerCase()
+    .replace(/[\s"'\-_.]/g, '');
+
+const matchesBlacklist = (description: string, category: string, blacklist: string[]): boolean => {
+  const haystack = `${normalize(description)} ${normalize(category)}`;
+  return blacklist.some(token => {
+    const t = normalize(token);
+    return t.length > 0 && haystack.includes(t);
+  });
+};
+
 export type AutoFillSuggestion = {
   key: string;
   description: string;
@@ -54,11 +88,14 @@ const isLoanStillActive = (
 /**
  * Build proposed transactions for the target month based on the previous 3 calendar months.
  * Includes operational, loan, and personal groups only. Skips auto-generated entries.
+ * Excludes any transaction whose description/category matches the blacklist.
  */
 export const computeNextMonthSuggestions = (
   transactions: Transaction[],
   target: { year: number; month: number }, // month is 0-indexed
+  userBlacklist: string[] = [],
 ): AutoFillSuggestion[] => {
+  const fullBlacklist = [...DEFAULT_AUTOFILL_BLACKLIST, ...userBlacklist];
   const targetMonthKey = `${target.year}-${String(target.month + 1).padStart(2, '0')}`;
 
   // Determine the 3 lookback months (calendar months immediately preceding target)
@@ -105,6 +142,9 @@ export const computeNextMonthSuggestions = (
 
     // For loans, skip if loan ended before the target month
     if (t.group === 'loan' && !isLoanStillActive(t.loanEndMonth, target.year, target.month)) return;
+
+    // Skip blacklisted descriptions/categories
+    if (matchesBlacklist(t.description || '', t.category || '', fullBlacklist)) return;
 
     const description = (t.description || '').trim() || '(ללא תיאור)';
     const category = (t.category || '').trim() || '(ללא קטגוריה)';

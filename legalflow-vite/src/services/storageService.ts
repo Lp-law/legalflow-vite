@@ -8,6 +8,7 @@ const STORAGE_KEY_CLIENTS = 'legalflow_clients_v1';
 const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
 const STORAGE_KEY_MEDICAL_TOKENS = 'legalflow_medical_dept_tokens_v1';
 const STORAGE_KEY_TX_DEPT_OVERRIDES = 'legalflow_tx_dept_overrides_v1';
+const STORAGE_KEY_AUTOFILL_BLACKLIST = 'legalflow_autofill_blacklist_v1';
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 
 const emitStorageChange = (key: string) => {
@@ -459,6 +460,43 @@ export const removeTransactionDeptOverride = (
   localStorage.setItem(STORAGE_KEY_TX_DEPT_OVERRIDES, JSON.stringify(rest));
   emitStorageChange('tx_dept_overrides');
   return rest;
+};
+
+// --- Auto-fill blacklist (descriptions to skip in next-month suggestions) ---
+
+export const getUserAutoFillBlacklist = (): string[] => {
+  const stored = localStorage.getItem(STORAGE_KEY_AUTOFILL_BLACKLIST);
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .map(item => item.trim());
+  } catch {
+    return [];
+  }
+};
+
+export const addToAutoFillBlacklist = (item: string): string[] => {
+  const trimmed = item.trim();
+  if (!trimmed) return getUserAutoFillBlacklist();
+  const current = getUserAutoFillBlacklist();
+  if (current.includes(trimmed)) return current;
+  const updated = [...current, trimmed];
+  localStorage.setItem(STORAGE_KEY_AUTOFILL_BLACKLIST, JSON.stringify(updated));
+  emitStorageChange('autofill_blacklist');
+  return updated;
+};
+
+export const removeFromAutoFillBlacklist = (item: string): string[] => {
+  const trimmed = item.trim();
+  const current = getUserAutoFillBlacklist();
+  const updated = current.filter(x => x !== trimmed);
+  if (updated.length === current.length) return current;
+  localStorage.setItem(STORAGE_KEY_AUTOFILL_BLACKLIST, JSON.stringify(updated));
+  emitStorageChange('autofill_blacklist');
+  return updated;
 };
 
 // --- Backup Logic ---
