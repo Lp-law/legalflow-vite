@@ -2,6 +2,25 @@ import type { Transaction } from '../types';
 import { parseDateKey } from './date';
 import { normalizeForBucketKey } from './nextMonthAutoFill';
 
+// Items reclassified as "personal withdrawals" - excluded from F1
+// (operating expenses) and subtracted instead in F3 (net cash flow).
+// Default seed; user can extend or remove via the modal.
+export const DEFAULT_PERSONAL_WITHDRAWAL_TOKENS: string[] = [
+  'מזונות',
+];
+
+const matchesWithdrawalToken = (
+  description: string,
+  category: string,
+  tokens: string[],
+): boolean => {
+  const haystack = `${normalizeForBucketKey(description)} ${normalizeForBucketKey(category)}`;
+  return tokens.some(t => {
+    const normalized = normalizeForBucketKey(t);
+    return normalized.length > 0 && haystack.includes(normalized);
+  });
+};
+
 export type ForecastResult = {
   asOfDate: Date;
   year: number;
@@ -70,7 +89,9 @@ const PROJECTED_TAX_RATE = 0.14;
 export const computeYearEndForecast = (
   transactions: Transaction[],
   today: Date = new Date(),
+  userWithdrawalTokens: string[] = [],
 ): ForecastResult => {
+  const allWithdrawalTokens = [...DEFAULT_PERSONAL_WITHDRAWAL_TOKENS, ...userWithdrawalTokens];
   const year = today.getFullYear();
   const currentMonthIndex = today.getMonth(); // 0..11
   const startOfYear = new Date(year, 0, 1);
@@ -110,8 +131,16 @@ export const computeYearEndForecast = (
   const incomeRemainingForecast = avgMonthlyIncome * remainingMonthsCount;
   const incomeTotal = incomeYTDActual + incomeRemainingForecast;
 
-  // ---- Operational expenses ----
-  const operationalYTD = ytdCompleted.filter(t => t.group === 'operational');
+  // ---- Recurring business expenses for F1 ----
+  // Includes operational AND personal-group items, EXCEPT items that the
+  // user reclassified as "personal withdrawals" (which go to F3).
+  const operationalYTD = ytdCompleted.filter(t => {
+    if (t.group === 'operational') return true;
+    if (t.group === 'personal') {
+      return !matchesWithdrawalToken(t.description || '', t.category || '', allWithdrawalTokens);
+    }
+    return false;
+  });
   const operationalExpensesYTDActual = operationalYTD.reduce(
     (s, t) => s + Math.abs(Number(t.amount) || 0),
     0,
@@ -206,9 +235,14 @@ export const computeYearEndForecast = (
   const loansRemainingForecast = avgMonthlyLoans * remainingMonthsCount;
   const totalLoans = loansYTDActual + loansRemainingForecast;
 
-  // ---- Personal withdrawals ----
+  // ---- Personal withdrawals (only items reclassified by user) ----
+  // Default: "מזונות" - user can extend via the modal.
   const withdrawalsYTDActual = ytdCompleted
-    .filter(t => t.group === 'personal')
+    .filter(
+      t =>
+        t.group === 'personal' &&
+        matchesWithdrawalToken(t.description || '', t.category || '', allWithdrawalTokens),
+    )
     .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
   const avgMonthlyWithdrawals =
     closedMonthsCount > 0 ? withdrawalsYTDActual / closedMonthsCount : 0;

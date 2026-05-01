@@ -1,7 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import { X, TrendingUp, TrendingDown, Activity, Wallet, AlertCircle } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { X, TrendingUp, TrendingDown, Activity, Wallet, AlertCircle, Hand } from 'lucide-react';
 import type { Transaction } from '../types';
-import { computeYearEndForecast } from '../utils/forecast';
+import { computeYearEndForecast, DEFAULT_PERSONAL_WITHDRAWAL_TOKENS } from '../utils/forecast';
+import {
+  getUserForecastWithdrawalTokens,
+  addToForecastWithdrawals,
+  removeFromForecastWithdrawals,
+  STORAGE_EVENT,
+} from '../services/storageService';
 
 interface ForecastModalProps {
   isOpen: boolean;
@@ -47,9 +53,31 @@ const Row: React.FC<{
 
 const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transactions }) => {
   const today = useMemo(() => new Date(), []);
-  const f = useMemo(() => computeYearEndForecast(transactions, today), [transactions, today]);
+  const [userWithdrawalTokens, setUserWithdrawalTokens] = useState<string[]>(() => getUserForecastWithdrawalTokens());
+  const f = useMemo(
+    () => computeYearEndForecast(transactions, today, userWithdrawalTokens),
+    [transactions, today, userWithdrawalTokens],
+  );
   const [showFixedList, setShowFixedList] = useState(false);
   const [showExcludedList, setShowExcludedList] = useState(false);
+  const [showWithdrawalManager, setShowWithdrawalManager] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setUserWithdrawalTokens(getUserForecastWithdrawalTokens());
+    window.addEventListener(STORAGE_EVENT, handler);
+    return () => window.removeEventListener(STORAGE_EVENT, handler);
+  }, []);
+
+  const handleReclassifyAsWithdrawal = (description: string) => {
+    if (!description.trim()) return;
+    addToForecastWithdrawals(description.trim());
+    setUserWithdrawalTokens(getUserForecastWithdrawalTokens());
+  };
+
+  const handleRemoveWithdrawalToken = (token: string) => {
+    removeFromForecastWithdrawals(token);
+    setUserWithdrawalTokens(getUserForecastWithdrawalTokens());
+  };
 
   if (!isOpen) return null;
 
@@ -155,7 +183,8 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                           <th className="text-right py-1">תיאור</th>
                           <th className="text-right py-1">חודשים</th>
                           <th className="text-right py-1">ממוצע/חודש</th>
-                          <th className="text-left py-1">סה"כ YTD</th>
+                          <th className="text-right py-1">סה"כ YTD</th>
+                          <th className="text-center py-1 w-20">פעולה</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -164,7 +193,18 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                             <td className="py-1">{item.description}</td>
                             <td className="py-1 text-emerald-700">{item.monthsAppeared}/{f.closedMonthsCount}</td>
                             <td className="py-1 text-emerald-700">{renderCurrency(item.avgPerMonth)}</td>
-                            <td className="py-1 text-left font-bold text-emerald-900">{renderCurrency(item.total)}</td>
+                            <td className="py-1 font-bold text-emerald-900">{renderCurrency(item.total)}</td>
+                            <td className="py-1 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleReclassifyAsWithdrawal(item.description)}
+                                className="text-[9px] text-violet-700 hover:text-violet-900 inline-flex items-center gap-0.5"
+                                title="סמן כמשיכה פרטית - יוצא מתחזית 1 ויורד בתחזית 3"
+                              >
+                                <Hand className="w-2.5 h-2.5" />
+                                סווג כמשיכה
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -256,9 +296,55 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
               <div className="mt-4 pt-3 border-t border-violet-200">
                 <Row label="תזרים נטו ב-31.12 (כמה יישאר)" value={f.netCashFlowEoY} total />
               </div>
-              <div className="mt-3 text-[11px] text-violet-800 bg-white/70 rounded p-2">
-                💰 זה כולל קרן + ריבית של הלוואות (תשלום מלא יוצא מהתזרים) ומשיכות פרטיות (הון בעלים).
-                המספר הסופי משקף כמה כסף צפוי להישאר בחשבון אחרי כל ההתחייבויות והמשיכות.
+              <div className="mt-3 text-[11px] text-violet-800 bg-white/70 rounded p-2 space-y-2">
+                <div>
+                  💰 משיכות פרטיות = פריטים שסיווגת כמשיכה. ברירת מחדל כוללת "מזונות" - כל היתר מקבוצת personal נחשבים הוצאה עסקית ויורדים בתחזית 1.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWithdrawalManager(s => !s)}
+                  className="text-blue-700 hover:underline"
+                >
+                  {showWithdrawalManager ? '↑ הסתר ניהול משיכות' : '↓ נהל סיווג משיכות פרטיות'}
+                </button>
+                {showWithdrawalManager && (
+                  <div className="space-y-2 pt-2">
+                    <div>
+                      <p className="text-[10px] font-semibold text-violet-700 mb-1">משיכות מובנות (תמיד פעילות):</p>
+                      <div className="flex flex-wrap gap-1">
+                        {DEFAULT_PERSONAL_WITHDRAWAL_TOKENS.map(item => (
+                          <span key={item} className="inline-block text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    {userWithdrawalTokens.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-violet-700 mb-1">סיווג שלך ({userWithdrawalTokens.length}):</p>
+                        <div className="flex flex-wrap gap-1">
+                          {userWithdrawalTokens.map(token => (
+                            <span key={token} className="inline-flex items-center gap-1 text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">
+                              {token}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveWithdrawalToken(token)}
+                                className="hover:text-violet-900"
+                                aria-label="החזר להוצאות עסקיות"
+                                title="החזר להוצאות עסקיות (יחזור לתחזית 1)"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-violet-600 italic">
+                      להוסיף פריט - לך לתחזית 1, פתח את "הצג הוצאות שזוהו כקבועות", ולחץ "🤚 סווג כמשיכה" ליד הפריט.
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
           </div>

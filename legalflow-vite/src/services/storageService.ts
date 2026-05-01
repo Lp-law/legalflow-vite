@@ -9,6 +9,7 @@ const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
 const STORAGE_KEY_MEDICAL_TOKENS = 'legalflow_medical_dept_tokens_v1';
 const STORAGE_KEY_TX_DEPT_OVERRIDES = 'legalflow_tx_dept_overrides_v1';
 const STORAGE_KEY_AUTOFILL_BLACKLIST = 'legalflow_autofill_blacklist_v1';
+const STORAGE_KEY_FORECAST_EXCLUSIONS = 'legalflow_forecast_exclusions_v1';
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 
 const emitStorageChange = (key: string) => {
@@ -460,6 +461,47 @@ export const removeTransactionDeptOverride = (
   localStorage.setItem(STORAGE_KEY_TX_DEPT_OVERRIDES, JSON.stringify(rest));
   emitStorageChange('tx_dept_overrides');
   return rest;
+};
+
+// --- Forecast: items reclassified as personal withdrawals ---
+// By default, the year-end forecast treats all personal-group recurring
+// expenses as part of the "fixed business expenses" base (F1). Items
+// added here are reclassified as "personal withdrawals" - excluded from
+// F1 and instead subtracted in F3.
+
+export const getUserForecastWithdrawalTokens = (): string[] => {
+  const stored = localStorage.getItem(STORAGE_KEY_FORECAST_EXCLUSIONS);
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      .map(x => x.trim());
+  } catch {
+    return [];
+  }
+};
+
+export const addToForecastWithdrawals = (token: string): string[] => {
+  const trimmed = token.trim();
+  if (!trimmed) return getUserForecastWithdrawalTokens();
+  const current = getUserForecastWithdrawalTokens();
+  if (current.includes(trimmed)) return current;
+  const updated = [...current, trimmed];
+  localStorage.setItem(STORAGE_KEY_FORECAST_EXCLUSIONS, JSON.stringify(updated));
+  emitStorageChange('forecast_exclusions');
+  return updated;
+};
+
+export const removeFromForecastWithdrawals = (token: string): string[] => {
+  const trimmed = token.trim();
+  const current = getUserForecastWithdrawalTokens();
+  const updated = current.filter(x => x !== trimmed);
+  if (updated.length === current.length) return current;
+  localStorage.setItem(STORAGE_KEY_FORECAST_EXCLUSIONS, JSON.stringify(updated));
+  emitStorageChange('forecast_exclusions');
+  return updated;
 };
 
 // --- Auto-fill blacklist (descriptions to skip in next-month suggestions) ---
