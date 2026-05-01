@@ -52,15 +52,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     return days;
   }, [startOfMonth]);
 
-  const monthTransactions = useMemo(
-    () =>
-      committedTransactions.filter(t => {
-        const tDate = parseDateKey(t.date);
-        return tDate >= startOfMonth && tDate <= endOfMonth;
-      }),
-    [committedTransactions, startOfMonth, endOfMonth]
-  );
-
   const ledgerMap = useMemo(
     () =>
       buildLedgerMapForRange({
@@ -70,6 +61,26 @@ const Dashboard: React.FC<DashboardProps> = ({
         openingBalance: initialBalance,
       }),
     [committedTransactions, startOfMonth, endOfMonth, initialBalance]
+  );
+
+  const allMonthTransactions = useMemo(
+    () =>
+      transactions.filter(t => {
+        const tDate = parseDateKey(t.date);
+        return tDate >= startOfMonth && tDate <= endOfMonth;
+      }),
+    [transactions, startOfMonth, endOfMonth]
+  );
+
+  const allLedgerMap = useMemo(
+    () =>
+      buildLedgerMapForRange({
+        transactions: transactions,
+        startDate: startOfMonth,
+        endDate: endOfMonth,
+        openingBalance: initialBalance,
+      }),
+    [transactions, startOfMonth, endOfMonth, initialBalance]
   );
 
   const previousDayKey = useMemo(() => {
@@ -104,6 +115,27 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
   }, [daysInMonth, ledgerMap, openingBalance]);
 
+  const allCashflowRows = useMemo(() => {
+    return daysInMonth.map(day => {
+      const dateKey = formatDateKey(day);
+      const ledgerRow = allLedgerMap.get(dateKey);
+      if (ledgerRow) {
+        return ledgerRow;
+      }
+      return {
+        date: dateKey,
+        salary: 0,
+        otherIncome: 0,
+        loans: 0,
+        withdrawals: 0,
+        expenses: 0,
+        taxes: 0,
+        bankAdjustments: 0,
+        balance: openingBalance,
+      } as CashflowRow;
+    });
+  }, [daysInMonth, allLedgerMap, openingBalance]);
+
   const todaysBalance = useMemo(() => {
     const todayRow = ledgerMap.get(todayKey);
     if (todayRow?.balance !== undefined) {
@@ -115,13 +147,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const projectedMonthEndBalance = useMemo(() => {
     const endKey = formatDateKey(endOfMonth);
-    const endRow = ledgerMap.get(endKey);
+    const endRow = allLedgerMap.get(endKey);
     if (endRow?.balance !== undefined) {
       return endRow.balance;
     }
-    const fallbackBalance = cashflowRows[cashflowRows.length - 1]?.balance;
+    const fallbackBalance = allCashflowRows[allCashflowRows.length - 1]?.balance;
     return fallbackBalance ?? openingBalance;
-  }, [ledgerMap, endOfMonth, cashflowRows, openingBalance]);
+  }, [allLedgerMap, endOfMonth, allCashflowRows, openingBalance]);
 
   const incomeTotal = useMemo(() => {
     return cashflowRows.reduce((sum, row) => {
@@ -135,7 +167,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [cashflowRows]);
 
   const expenseTotal = useMemo(() => {
-    return cashflowRows.reduce((sum, row) => {
+    return allCashflowRows.reduce((sum, row) => {
       const loans = Math.abs(normalize(row.loans));
       const withdrawals = Math.abs(normalize(row.withdrawals));
       const expenses = Math.abs(normalize(row.expenses));
@@ -143,7 +175,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       const bankAdjustments = Math.max(0, -normalize(row.bankAdjustments));
       return sum + loans + withdrawals + expenses + taxes + bankAdjustments;
     }, 0);
-  }, [cashflowRows]);
+  }, [allCashflowRows]);
 
   const bankAdjustmentNet = useMemo(() => {
     return cashflowRows.reduce(
@@ -153,35 +185,37 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [cashflowRows]);
 
   const totalsByGroup = useMemo(() => {
-    return cashflowRows.reduce(
-      (acc, row) => {
-        acc.fee += Math.max(0, normalize(row.salary));
-        acc.otherIncome += Math.max(0, normalize(row.otherIncome));
-        acc.operational += Math.abs(normalize(row.expenses));
-        acc.taxes += Math.abs(normalize(row.taxes));
-        acc.loans += Math.abs(normalize(row.loans));
-        acc.withdrawals += Math.abs(normalize(row.withdrawals));
-        return acc;
-      },
-      {
-        fee: 0,
-        otherIncome: 0,
-        operational: 0,
-        taxes: 0,
-        loans: 0,
-        withdrawals: 0,
-      }
-    );
-  }, [cashflowRows]);
+    const totals = {
+      fee: 0,
+      otherIncome: 0,
+      operational: 0,
+      taxes: 0,
+      loans: 0,
+      withdrawals: 0,
+    };
+    // Income totals from committed only (matches "הכנסות החודש" semantics)
+    cashflowRows.forEach(row => {
+      totals.fee += Math.max(0, normalize(row.salary));
+      totals.otherIncome += Math.max(0, normalize(row.otherIncome));
+    });
+    // Expense totals from all transactions including pending (matches "הוצאות החודש" semantics)
+    allCashflowRows.forEach(row => {
+      totals.operational += Math.abs(normalize(row.expenses));
+      totals.taxes += Math.abs(normalize(row.taxes));
+      totals.loans += Math.abs(normalize(row.loans));
+      totals.withdrawals += Math.abs(normalize(row.withdrawals));
+    });
+    return totals;
+  }, [cashflowRows, allCashflowRows]);
 
   const [isChartBuilderOpen, setIsChartBuilderOpen] = useState(false);
 
   const chartData = useMemo(() => {
-    if (cashflowRows.length === 0) {
+    if (allCashflowRows.length === 0) {
       return [];
     }
 
-    return cashflowRows.map(row => {
+    return allCashflowRows.map(row => {
       const salary = Math.max(0, normalize(row.salary));
       const otherIncome = Math.max(0, normalize(row.otherIncome));
       const positiveBankAdjustments = Math.max(0, normalize(row.bankAdjustments));
@@ -202,11 +236,53 @@ const Dashboard: React.FC<DashboardProps> = ({
         expense,
       };
     });
-  }, [cashflowRows, openingBalance]);
+  }, [allCashflowRows, openingBalance]);
+
+  const startOfYear = useMemo(
+    () => new Date(today.getFullYear(), 0, 1),
+    [today]
+  );
+
+  const endOfPrevMonth = useMemo(() => {
+    const d = new Date(today.getFullYear(), today.getMonth(), 0);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, [today]);
+
+  const ytdData = useMemo(() => {
+    const hasData = endOfPrevMonth >= startOfYear;
+    let income = 0;
+    let expenses = 0;
+
+    if (hasData) {
+      committedTransactions.forEach(t => {
+        const tDate = parseDateKey(t.date);
+        if (tDate < startOfYear || tDate > endOfPrevMonth) return;
+
+        const amount = normalize(t.amount);
+        const absAmount = Math.abs(amount);
+
+        if (t.group === 'fee' || t.group === 'other_income') {
+          income += absAmount;
+        } else if (t.group === 'bank_adjustment') {
+          if (amount > 0) income += amount;
+          else expenses += Math.abs(amount);
+        } else {
+          // operational, tax, loan, personal
+          expenses += absAmount;
+        }
+      });
+    }
+
+    const profit = income - expenses;
+    const profitPct = income > 0 ? (profit / income) * 100 : 0;
+
+    return { income, expenses, profit, profitPct, hasData };
+  }, [committedTransactions, startOfYear, endOfPrevMonth]);
 
   const expensesByCategory = useMemo(() => {
     const data: Record<string, number> = {};
-    monthTransactions.forEach(t => {
+    allMonthTransactions.forEach(t => {
       if (t.type === 'expense') {
         data[t.category] = (data[t.category] || 0) + t.amount;
       }
@@ -220,7 +296,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         color: cat ? cat.color : '#cbd5e1'
       };
     }).sort((a, b) => b.value - a.value);
-  }, [monthTransactions]);
+  }, [allMonthTransactions]);
 
   // --- Components ---
 
@@ -361,23 +437,77 @@ const Dashboard: React.FC<DashboardProps> = ({
           accentTextClass="text-amber-300"
           subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
         />
-        <KPICard 
-          title="הכנסות החודש" 
-          value={incomeTotal} 
-          icon={TrendingUp} 
-          trend={12} 
+        <KPICard
+          title="הכנסות החודש"
+          value={incomeTotal}
+          icon={TrendingUp}
           accentBgClass="text-emerald-300"
           accentTextClass="text-emerald-300"
+          subtitle="רק תנועות שבוצעו"
         />
-        <KPICard 
-          title="הוצאות החודש" 
-          value={expenseTotal} 
-          icon={TrendingDown} 
-          trend={-5} 
+        <KPICard
+          title="הוצאות החודש"
+          value={expenseTotal}
+          icon={TrendingDown}
           accentBgClass="text-red-300"
           accentTextClass="text-red-300"
+          subtitle="כולל צפויות"
         />
       </div>
+
+      {/* YTD KPI Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <KPICard
+          title="הכנסות מתחילת השנה"
+          value={ytdData.income}
+          icon={TrendingUp}
+          accentBgClass="text-emerald-300"
+          accentTextClass="text-emerald-300"
+          subtitle={
+            ytdData.hasData
+              ? `מ-1.1.${today.getFullYear()} עד ${endOfPrevMonth.toLocaleDateString('he-IL')}`
+              : 'אין חודש שנסגר עדיין השנה'
+          }
+        />
+        <KPICard
+          title="הוצאות מתחילת השנה"
+          value={ytdData.expenses}
+          icon={TrendingDown}
+          accentBgClass="text-red-300"
+          accentTextClass="text-red-300"
+          subtitle={
+            ytdData.hasData
+              ? `מ-1.1.${today.getFullYear()} עד ${endOfPrevMonth.toLocaleDateString('he-IL')}`
+              : 'אין חודש שנסגר עדיין השנה'
+          }
+        />
+        <div className="bg-white/5 p-6 rounded-2xl shadow-lg border border-white/10 hover:border-white/30 transition-colors text-slate-100">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 rounded-xl border border-white/10 bg-white/10 text-violet-300">
+              <Activity className="w-6 h-6" />
+            </div>
+          </div>
+          <h3 className="text-slate-300 text-sm font-medium mb-1">רווח תפעולי מוערך</h3>
+          {ytdData.hasData && ytdData.income > 0 ? (
+            <>
+              <p className={`text-2xl font-bold ${ytdData.profit >= 0 ? 'text-[var(--law-gold)]' : 'text-rose-300'}`}>
+                {ytdData.profitPct.toFixed(1)}%
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                ₪{ytdData.profit.toLocaleString()} רווח על ₪{ytdData.income.toLocaleString()} הכנסות
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-bold text-slate-500">—</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {ytdData.hasData ? 'אין הכנסות' : 'אין חודש שנסגר עדיין השנה'}
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="law-card flex flex-col justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-slate-300 mb-1">ניתוח שכר טרחה</p>
@@ -442,10 +572,13 @@ const Dashboard: React.FC<DashboardProps> = ({
         {/* Main Trend Chart */}
         <div className="lg:col-span-2 law-card">
         <div className="flex justify-between items-center mb-6 gap-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-300" />
-              מגמת יתרה יומית
-            </h3>
+            <div className="flex flex-col gap-1">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-300" />
+                מגמת יתרה יומית
+              </h3>
+              <p className="text-xs text-slate-400">כולל תנועות צפויות (Pending)</p>
+            </div>
           <div className="flex items-center gap-3">
             <button 
               onClick={handleExportDashboard}
