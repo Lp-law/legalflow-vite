@@ -17,7 +17,7 @@ export type ForecastResult = {
   // Operational expenses
   operationalExpensesYTDActual: number; // all operational that already happened
   fixedExpensesYTDTotal: number; // only fixed (appears in >=50% of closed months)
-  fixedExpenseDescriptions: string[];
+  fixedExpenseBreakdown: Array<{ description: string; total: number; monthsAppeared: number; avgPerMonth: number }>;
   excludedOneTimeDescriptions: Array<{ description: string; total: number; monthsAppeared: number }>;
   excludedOneTimeAmount: number;
   avgFixedMonthlyExpense: number;
@@ -146,12 +146,17 @@ export const computeYearEndForecast = (
 
   let fixedExpensesYTDTotal = 0;
   let excludedOneTimeAmount = 0;
-  const fixedExpenseDescriptions: string[] = [];
+  const fixedExpenseBreakdown: Array<{ description: string; total: number; monthsAppeared: number; avgPerMonth: number }> = [];
   const excludedOneTimeDescriptions: Array<{ description: string; total: number; monthsAppeared: number }> = [];
   expenseBuckets.forEach(g => {
     if (g.months.size >= fixedThreshold) {
       fixedExpensesYTDTotal += g.total;
-      fixedExpenseDescriptions.push(g.description);
+      fixedExpenseBreakdown.push({
+        description: g.description,
+        total: g.total,
+        monthsAppeared: g.months.size,
+        avgPerMonth: g.total / g.months.size,
+      });
     } else {
       excludedOneTimeAmount += g.total;
       excludedOneTimeDescriptions.push({
@@ -161,7 +166,7 @@ export const computeYearEndForecast = (
       });
     }
   });
-  fixedExpenseDescriptions.sort();
+  fixedExpenseBreakdown.sort((a, b) => b.total - a.total);
   excludedOneTimeDescriptions.sort((a, b) => b.total - a.total);
 
   const avgFixedMonthlyExpense =
@@ -224,7 +229,7 @@ export const computeYearEndForecast = (
     incomeTotal,
     operationalExpensesYTDActual,
     fixedExpensesYTDTotal,
-    fixedExpenseDescriptions,
+    fixedExpenseBreakdown,
     excludedOneTimeDescriptions,
     excludedOneTimeAmount,
     avgFixedMonthlyExpense,

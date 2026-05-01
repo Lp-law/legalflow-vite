@@ -136,9 +136,9 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                   ממוצע חודשי קבוע: <strong>{renderCurrency(f.avgFixedMonthlyExpense)}</strong>.
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {f.fixedExpenseDescriptions.length > 0 && (
+                  {f.fixedExpenseBreakdown.length > 0 && (
                     <button onClick={() => setShowFixedList(s => !s)} className="text-blue-700 hover:underline">
-                      {showFixedList ? '↑ הסתר' : '↓ הצג'} {f.fixedExpenseDescriptions.length} הוצאות שזוהו כקבועות
+                      {showFixedList ? '↑ הסתר' : '↓ הצג'} {f.fixedExpenseBreakdown.length} הוצאות שזוהו כקבועות (סה"כ {renderCurrency(f.fixedExpensesYTDTotal)})
                     </button>
                   )}
                   {f.excludedOneTimeDescriptions.length > 0 && (
@@ -148,12 +148,27 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                   )}
                 </div>
                 {showFixedList && (
-                  <div className="flex flex-wrap gap-1">
-                    {f.fixedExpenseDescriptions.map(d => (
-                      <span key={d} className="inline-block text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                        {d}
-                      </span>
-                    ))}
+                  <div className="space-y-1">
+                    <table className="w-full text-[10px]">
+                      <thead className="text-emerald-700">
+                        <tr>
+                          <th className="text-right py-1">תיאור</th>
+                          <th className="text-right py-1">חודשים</th>
+                          <th className="text-right py-1">ממוצע/חודש</th>
+                          <th className="text-left py-1">סה"כ YTD</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {f.fixedExpenseBreakdown.map(item => (
+                          <tr key={item.description} className="border-t border-emerald-200">
+                            <td className="py-1">{item.description}</td>
+                            <td className="py-1 text-emerald-700">{item.monthsAppeared}/{f.closedMonthsCount}</td>
+                            <td className="py-1 text-emerald-700">{renderCurrency(item.avgPerMonth)}</td>
+                            <td className="py-1 text-left font-bold text-emerald-900">{renderCurrency(item.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
                 {showExcludedList && (
