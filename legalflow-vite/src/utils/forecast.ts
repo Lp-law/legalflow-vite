@@ -144,11 +144,13 @@ export const computeYearEndForecast = (
   });
 
   // ---- Income (NET) ----
+  // Only fee income (divided by 1.18) - other_income is NOT included
+  // in the projection base per user preference.
   let incomeYTDActual = 0;
   ytdCompleted.forEach(t => {
-    const abs = Math.abs(Number(t.amount) || 0);
-    if (t.group === 'fee') incomeYTDActual += abs / 1.18;
-    else if (t.group === 'other_income') incomeYTDActual += abs;
+    if (t.group === 'fee') {
+      incomeYTDActual += Math.abs(Number(t.amount) || 0) / 1.18;
+    }
   });
   const avgMonthlyIncome =
     closedMonthsCount > 0 ? incomeYTDActual / closedMonthsCount : 0;
@@ -302,8 +304,8 @@ export const computeYearEndForecast = (
       if (monthKeyOf(tDate) !== mk) return;
       txCount += 1;
       const abs = Math.abs(Number(t.amount) || 0);
+      // Only fee income counts (NET, ÷1.18). other_income excluded per user preference.
       if (t.group === 'fee') netIncome += abs / 1.18;
-      else if (t.group === 'other_income') netIncome += abs;
       else if (t.group === 'operational') opExpenses += abs;
     });
     monthlyBreakdown.push({
