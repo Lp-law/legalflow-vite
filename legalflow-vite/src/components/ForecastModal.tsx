@@ -8,6 +8,8 @@ import {
   removeForecastItemOverride,
   getForecastMonthlyBuffer,
   setForecastMonthlyBuffer,
+  getForecastManualMonthlyTotal,
+  setForecastManualMonthlyTotal,
   STORAGE_EVENT,
 } from '../services/storageService';
 import type { ForecastItemOverride } from '../services/storageService';
@@ -59,14 +61,17 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
   const [overrides, setOverrides] = useState<Record<string, ForecastItemOverride>>(() => getForecastItemOverrides());
   const [monthlyBuffer, setBuffer] = useState<number>(() => getForecastMonthlyBuffer());
   const [bufferDraft, setBufferDraft] = useState<string>(() => String(getForecastMonthlyBuffer()));
+  const [manualMonthlyTotal, setManualMonthlyTotal] = useState<number>(() => getForecastManualMonthlyTotal());
+  const [manualTotalDraft, setManualTotalDraft] = useState<string>(() => String(getForecastManualMonthlyTotal()));
   const [editingAmountKey, setEditingAmountKey] = useState<string | null>(null);
   const [amountDraft, setAmountDraft] = useState<string>('');
 
   const f = useMemo(
-    () => computeYearEndForecast(transactions, today, overrides, monthlyBuffer),
-    [transactions, today, overrides, monthlyBuffer],
+    () => computeYearEndForecast(transactions, today, overrides, monthlyBuffer, manualMonthlyTotal),
+    [transactions, today, overrides, monthlyBuffer, manualMonthlyTotal],
   );
 
+  const [showAdvancedDetails, setShowAdvancedDetails] = useState(false);
   const [showFixedList, setShowFixedList] = useState(false);
   const [showExcludedList, setShowExcludedList] = useState(false);
   const [showHiddenItems, setShowHiddenItems] = useState(false);
@@ -76,6 +81,8 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
       setOverrides(getForecastItemOverrides());
       setBuffer(getForecastMonthlyBuffer());
       setBufferDraft(String(getForecastMonthlyBuffer()));
+      setManualMonthlyTotal(getForecastManualMonthlyTotal());
+      setManualTotalDraft(String(getForecastManualMonthlyTotal()));
     };
     window.addEventListener(STORAGE_EVENT, handler);
     return () => window.removeEventListener(STORAGE_EVENT, handler);
@@ -125,6 +132,18 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
     const next = setForecastMonthlyBuffer(parsed);
     setBuffer(next);
     setBufferDraft(String(next));
+  };
+
+  const handleSaveManualTotal = () => {
+    const parsed = Number(manualTotalDraft.replace(/[, ₪]/g, ''));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      alert('נא להזין סכום חוקי');
+      setManualTotalDraft(String(manualMonthlyTotal));
+      return;
+    }
+    const next = setForecastManualMonthlyTotal(parsed);
+    setManualMonthlyTotal(next);
+    setManualTotalDraft(String(next));
   };
 
   if (!isOpen) return null;
@@ -183,35 +202,100 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                   />
                   <Row label="סה״כ הכנסות צפויות" value={f.incomeTotal} bold />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <h4 className="text-sm font-semibold text-emerald-800 mb-2">הוצאות תפעוליות</h4>
                   <Row
                     label="הוצאות בפועל YTD"
                     value={f.operationalExpensesYTDActual}
-                    hint="רק קבוצת operational. משיכות פרטיות יורדות ב-תחזית 3."
+                    hint={`סה"כ ב-${f.closedMonthsCount} חודשים שנסגרו (רק קבוצת operational)`}
                     negative
                   />
-                  <Row
-                    label="צפי הוצאות קבועות לחודשים הנותרים"
-                    value={f.fixedExpensesRemainingForecast}
-                    hint={`${renderCurrency(f.avgFixedMonthlyExpense)} ממוצע קבוע × ${f.remainingMonthsCount} חודשים`}
-                    negative
-                  />
-                  {f.monthlyBufferAmount > 0 && (
-                    <Row
-                      label="באפר חודשי לבלתי צפוי"
-                      value={f.bufferRemainingForecast}
-                      hint={`${renderCurrency(f.monthlyBufferAmount)} × ${f.remainingMonthsCount} חודשים`}
-                      negative
-                    />
-                  )}
-                  <Row label="סה״כ הוצאות צפויות" value={f.operationalExpensesTotal} bold negative />
+                  {/* Manual monthly expense input - the user's authoritative number */}
+                  <div className="bg-white rounded-lg border border-emerald-300 p-3 mt-2">
+                    <label className="block text-xs font-semibold text-emerald-900 mb-1">
+                      הוצאה קבועה מוערכת לחודש (כולל בלתי צפוי):
+                    </label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="number"
+                        value={manualTotalDraft}
+                        onChange={(e) => setManualTotalDraft(e.target.value)}
+                        onBlur={handleSaveManualTotal}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                        min="0"
+                        step="500"
+                        className="w-32 border border-emerald-400 rounded px-2 py-1 text-sm font-bold"
+                      />
+                      <span className="text-xs text-emerald-700">
+                        ₪/חודש × {f.remainingMonthsCount} חודשים = <strong>{renderCurrency(f.effectiveMonthlyExpense * f.remainingMonthsCount)}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <Row label="סה״כ הוצאות צפויות לשנה" value={f.operationalExpensesTotal} bold negative />
                 </div>
               </div>
               <div className="mt-4 pt-3 border-t border-emerald-200">
                 <Row label="רווח צפוי לסוף שנה (אחרי הוצאות קבועות)" value={f.operatingProfit} total />
               </div>
 
+              {/* Monthly verification table - always visible */}
+              <div className="mt-4 bg-white rounded-lg border border-emerald-200 p-3">
+                <h4 className="text-sm font-semibold text-emerald-900 mb-2">📊 פירוט חודשי - בקרה (חודשים שנסגרו)</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-emerald-700 border-b border-emerald-200">
+                      <tr>
+                        <th className="text-right py-1">חודש</th>
+                        <th className="text-right py-1">הכנסה (לפני מע"מ)</th>
+                        <th className="text-right py-1">הוצאה תפעולית</th>
+                        <th className="text-right py-1">רווח</th>
+                        <th className="text-center py-1 text-slate-400">תנועות</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {f.monthlyBreakdown.map(row => {
+                        const profit = row.netIncome - row.operationalExpenses;
+                        return (
+                          <tr key={row.monthKey} className="border-t border-emerald-100">
+                            <td className="py-1 font-semibold">{row.monthLabel}</td>
+                            <td className="py-1 text-emerald-700 font-medium">{renderCurrency(row.netIncome)}</td>
+                            <td className="py-1 text-rose-600">-{renderCurrency(row.operationalExpenses)}</td>
+                            <td className={`py-1 font-bold ${profit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+                              {profit < 0 ? '-' : ''}{renderCurrency(Math.abs(profit))}
+                            </td>
+                            <td className="py-1 text-center text-slate-400">{row.completedTransactionCount}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="border-t-2 border-emerald-300 font-bold">
+                      <tr>
+                        <td className="py-1">סה"כ {f.closedMonthsCount} חודשים</td>
+                        <td className="py-1 text-emerald-800">{renderCurrency(f.incomeYTDActual)}</td>
+                        <td className="py-1 text-rose-700">-{renderCurrency(f.operationalExpensesYTDActual)}</td>
+                        <td className={`py-1 ${(f.incomeYTDActual - f.operationalExpensesYTDActual) >= 0 ? 'text-emerald-900' : 'text-rose-800'}`}>
+                          {renderCurrency(f.incomeYTDActual - f.operationalExpensesYTDActual)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2">
+                  טבלה זו מציגה את הנתונים בפועל לכל חודש שנסגר - לבקרה שהחישוב של ה-YTD נכון. ההוצאה לחודשים הבאים מבוססת על המספר ידני שלמעלה.
+                </p>
+              </div>
+
+              {/* Advanced details - collapsed by default */}
+              <button
+                type="button"
+                onClick={() => setShowAdvancedDetails(s => !s)}
+                className="mt-3 text-[11px] text-blue-700 hover:underline"
+              >
+                {showAdvancedDetails ? '↑ הסתר' : '↓ הצג'} פירוט מתקדם (זיהוי אוטומטי + override פר-פריט + באפר)
+              </button>
+
+              {showAdvancedDetails && (
               <div className="mt-3 text-[11px] text-emerald-800 bg-white/70 rounded p-2 space-y-2">
                 {/* Buffer input */}
                 <div className="flex items-center gap-2 flex-wrap">
@@ -407,6 +491,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                   </div>
                 )}
               </div>
+              )}
             </section>
 
             {/* Forecast 2: Profit after tax */}

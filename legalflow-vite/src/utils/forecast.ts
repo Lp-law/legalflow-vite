@@ -48,6 +48,8 @@ export type ForecastResult = {
   fixedExpensesRemainingForecast: number;
   monthlyBufferAmount: number;
   bufferRemainingForecast: number;
+  effectiveMonthlyExpense: number; // single number used per remaining month
+  isManualMonthlyTotalUsed: boolean;
   operationalExpensesTotal: number;
 
   // Forecast 1 result
@@ -73,6 +75,15 @@ export type ForecastResult = {
 
   // Forecast 3 result
   netCashFlowEoY: number;
+
+  // Monthly verification breakdown for closed months
+  monthlyBreakdown: Array<{
+    monthKey: string;     // YYYY-MM
+    monthLabel: string;   // Hebrew month name + year
+    netIncome: number;    // fee/1.18 + other_income
+    operationalExpenses: number; // group=operational only
+    completedTransactionCount: number;
+  }>;
 };
 
 const monthKeyOf = (date: Date) =>
@@ -98,6 +109,7 @@ export const computeYearEndForecast = (
   today: Date = new Date(),
   itemOverrides: Record<string, ForecastItemOverride> = {},
   monthlyBuffer: number = 0,
+  manualMonthlyTotal: number | null = null,
 ): ForecastResult => {
   const year = today.getFullYear();
   const currentMonthIndex = today.getMonth(); // 0..11
@@ -215,11 +227,19 @@ export const computeYearEndForecast = (
 
   // Effective avg = sum of effective monthly amounts (after overrides applied)
   const avgFixedMonthlyExpense = totalEffectiveMonthlyForFixed;
-  const fixedExpensesRemainingForecast = avgFixedMonthlyExpense * remainingMonthsCount;
   const monthlyBufferAmount = Number.isFinite(monthlyBuffer) && monthlyBuffer > 0 ? monthlyBuffer : 0;
-  const bufferRemainingForecast = monthlyBufferAmount * remainingMonthsCount;
-  const operationalExpensesTotal =
-    operationalExpensesYTDActual + fixedExpensesRemainingForecast + bufferRemainingForecast;
+
+  // If user provided a manual monthly total, use it directly (overrides
+  // both detected sum and buffer). Otherwise use detected + buffer.
+  const useManualTotal =
+    typeof manualMonthlyTotal === 'number' && Number.isFinite(manualMonthlyTotal) && manualMonthlyTotal >= 0;
+  const effectiveMonthlyExpense = useManualTotal
+    ? manualMonthlyTotal!
+    : avgFixedMonthlyExpense + monthlyBufferAmount;
+  const fixedExpensesRemainingForecast = useManualTotal ? 0 : avgFixedMonthlyExpense * remainingMonthsCount;
+  const bufferRemainingForecast = useManualTotal ? 0 : monthlyBufferAmount * remainingMonthsCount;
+  const remainingTotalForecast = effectiveMonthlyExpense * remainingMonthsCount;
+  const operationalExpensesTotal = operationalExpensesYTDActual + remainingTotalForecast;
 
   // ---- Forecast 1 ----
   const operatingProfit = incomeTotal - operationalExpensesTotal;
@@ -263,6 +283,33 @@ export const computeYearEndForecast = (
   const netCashFlowEoY = profitAfterTax - totalLoans - totalWithdrawals;
   // (totalWithdrawals = personal-group spending, kept separate from F1 operational)
 
+  // ---- Monthly breakdown for closed months (verification table) ----
+  const monthlyBreakdown: ForecastResult['monthlyBreakdown'] = [];
+  for (let m = 0; m < closedMonthsCount; m += 1) {
+    const monthDate = new Date(year, m, 1);
+    const mk = monthKeyOf(monthDate);
+    const monthLabel = monthDate.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+    let netIncome = 0;
+    let opExpenses = 0;
+    let txCount = 0;
+    ytdCompleted.forEach(t => {
+      const tDate = parseDateKey(t.date);
+      if (monthKeyOf(tDate) !== mk) return;
+      txCount += 1;
+      const abs = Math.abs(Number(t.amount) || 0);
+      if (t.group === 'fee') netIncome += abs / 1.18;
+      else if (t.group === 'other_income') netIncome += abs;
+      else if (t.group === 'operational') opExpenses += abs;
+    });
+    monthlyBreakdown.push({
+      monthKey: mk,
+      monthLabel,
+      netIncome,
+      operationalExpenses: opExpenses,
+      completedTransactionCount: txCount,
+    });
+  }
+
   return {
     asOfDate: today,
     year,
@@ -281,6 +328,8 @@ export const computeYearEndForecast = (
     fixedExpensesRemainingForecast,
     monthlyBufferAmount,
     bufferRemainingForecast,
+    effectiveMonthlyExpense,
+    isManualMonthlyTotalUsed: useManualTotal,
     operationalExpensesTotal,
     operatingProfit,
     taxAdvancesYTDActual,
@@ -294,5 +343,6 @@ export const computeYearEndForecast = (
     withdrawalsRemainingForecast,
     totalWithdrawals,
     netCashFlowEoY,
+    monthlyBreakdown,
   };
 };

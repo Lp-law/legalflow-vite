@@ -11,7 +11,9 @@ const STORAGE_KEY_TX_DEPT_OVERRIDES = 'legalflow_tx_dept_overrides_v1';
 const STORAGE_KEY_AUTOFILL_BLACKLIST = 'legalflow_autofill_blacklist_v1';
 const STORAGE_KEY_FORECAST_OVERRIDES = 'legalflow_forecast_item_overrides_v1';
 const STORAGE_KEY_FORECAST_BUFFER = 'legalflow_forecast_monthly_buffer_v1';
+const STORAGE_KEY_FORECAST_MANUAL_TOTAL = 'legalflow_forecast_manual_monthly_total_v1';
 const FORECAST_BUFFER_DEFAULT = 7500;
+const FORECAST_MANUAL_TOTAL_DEFAULT = 185000;
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 
 const emitStorageChange = (key: string) => {
@@ -536,6 +538,23 @@ export const setForecastMonthlyBuffer = (value: number): number => {
   if (!Number.isFinite(value) || value < 0) return getForecastMonthlyBuffer();
   localStorage.setItem(STORAGE_KEY_FORECAST_BUFFER, String(value));
   emitStorageChange('forecast_monthly_buffer');
+  return value;
+};
+
+// User-set monthly expected expense (overrides auto-detected sum entirely
+// for the F1 projection). When set, the forecast uses this single number
+// × remaining months instead of summing per-bucket averages + buffer.
+export const getForecastManualMonthlyTotal = (): number => {
+  const stored = localStorage.getItem(STORAGE_KEY_FORECAST_MANUAL_TOTAL);
+  if (stored === null) return FORECAST_MANUAL_TOTAL_DEFAULT;
+  const parsed = Number(stored);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : FORECAST_MANUAL_TOTAL_DEFAULT;
+};
+
+export const setForecastManualMonthlyTotal = (value: number): number => {
+  if (!Number.isFinite(value) || value < 0) return getForecastManualMonthlyTotal();
+  localStorage.setItem(STORAGE_KEY_FORECAST_MANUAL_TOTAL, String(value));
+  emitStorageChange('forecast_manual_monthly_total');
   return value;
 };
 
