@@ -252,16 +252,13 @@ export const computeYearEndForecast = (
   const loansRemainingForecast = avgMonthlyLoans * remainingMonthsCount;
   const totalLoans = loansYTDActual + loansRemainingForecast;
 
-  // ---- Personal withdrawals (subtracted in F3) ----
-  // Linear projection from YTD average.
-  const withdrawalsYTDActual = ytdCompleted
-    .filter(t => t.group === 'personal')
-    .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
-  const avgMonthlyWithdrawals =
-    closedMonthsCount > 0 ? withdrawalsYTDActual / closedMonthsCount : 0;
-  const withdrawalsRemainingForecast =
-    avgMonthlyWithdrawals * remainingMonthsCount;
-  const totalWithdrawals = withdrawalsYTDActual + withdrawalsRemainingForecast;
+  // ---- Personal withdrawals: NOT subtracted ----
+  // The user views personal withdrawals (incl. alimony) as a USE of
+  // profit, not an expense that reduces profit. They stay outside the
+  // forecast calculation entirely. Kept as zeros for type compatibility.
+  const withdrawalsYTDActual = 0;
+  const withdrawalsRemainingForecast = 0;
+  const totalWithdrawals = 0;
 
   const netCashFlowEoY = profitAfterTax - totalLoans - totalWithdrawals;
   // (totalWithdrawals = personal-group spending, kept separate from F1 operational)

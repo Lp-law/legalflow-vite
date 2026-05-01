@@ -69,6 +69,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
 
   const [showFixedList, setShowFixedList] = useState(false);
   const [showExcludedList, setShowExcludedList] = useState(false);
+  const [showHiddenItems, setShowHiddenItems] = useState(false);
 
   useEffect(() => {
     const handler = () => {
@@ -130,6 +131,8 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
 
   const noClosedMonths = f.closedMonthsCount === 0;
   const hasAnyOverride = Object.keys(overrides).length > 0;
+  const activeFixedItems = f.fixedExpenseBreakdown.filter(item => !item.isExcluded);
+  const hiddenFixedItems = f.fixedExpenseBreakdown.filter(item => item.isExcluded);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto pt-12">
@@ -232,9 +235,14 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                 </div>
 
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {f.fixedExpenseBreakdown.length > 0 && (
+                  {activeFixedItems.length > 0 && (
                     <button onClick={() => setShowFixedList(s => !s)} className="text-blue-700 hover:underline">
-                      {showFixedList ? '↑ הסתר' : '↓ הצג'} {f.fixedExpenseBreakdown.length} הוצאות שזוהו כקבועות
+                      {showFixedList ? '↑ הסתר' : '↓ הצג'} {activeFixedItems.length} הוצאות פעילות בתחזית
+                    </button>
+                  )}
+                  {hiddenFixedItems.length > 0 && (
+                    <button onClick={() => setShowHiddenItems(s => !s)} className="text-rose-700 hover:underline">
+                      {showHiddenItems ? '↑ הסתר' : '↓ הצג'} {hiddenFixedItems.length} פריטים שהסרת
                     </button>
                   )}
                   {f.excludedOneTimeDescriptions.length > 0 && (
@@ -257,18 +265,15 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                         </tr>
                       </thead>
                       <tbody>
-                        {f.fixedExpenseBreakdown.map(item => (
+                        {activeFixedItems.map(item => (
                           <tr
                             key={item.bucketKey}
-                            className={`border-t border-emerald-200 ${item.isExcluded ? 'opacity-50 line-through' : ''}`}
+                            className="border-t border-emerald-200"
                           >
                             <td className="py-1">
                               {item.description}
-                              {item.isAmountOverridden && !item.isExcluded && (
+                              {item.isAmountOverridden && (
                                 <span className="mr-1 inline-block text-[9px] bg-blue-100 text-blue-700 px-1 rounded">override</span>
-                              )}
-                              {item.isExcluded && (
-                                <span className="mr-1 inline-block text-[9px] bg-rose-100 text-rose-700 px-1 rounded">הוסר</span>
                               )}
                             </td>
                             <td className="py-1 text-emerald-700">{item.monthsAppeared}/{f.closedMonthsCount}</td>
@@ -304,7 +309,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                               ) : (
                                 <span>
                                   {renderCurrency(item.effectiveMonthlyAmount)}
-                                  {item.isAmountOverridden && !item.isExcluded && (
+                                  {item.isAmountOverridden && (
                                     <span className="text-[9px] text-slate-500 ml-1">(היה {renderCurrency(item.avgPerMonth)})</span>
                                   )}
                                 </span>
@@ -313,7 +318,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                             <td className="py-1 font-bold text-emerald-900">{renderCurrency(item.total)}</td>
                             <td className="py-1 text-center">
                               <div className="flex gap-1 justify-center flex-wrap">
-                                {!item.isExcluded && editingAmountKey !== item.bucketKey && (
+                                {editingAmountKey !== item.bucketKey && (
                                   <button
                                     type="button"
                                     onClick={() => handleStartAmountEdit(item.bucketKey, item.effectiveMonthlyAmount)}
@@ -324,18 +329,16 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                                     סכום
                                   </button>
                                 )}
-                                {!item.isExcluded && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleExcludeItem(item.bucketKey)}
-                                    className="text-[9px] text-rose-700 hover:text-rose-900 inline-flex items-center gap-0.5"
-                                    title="הסר את הפריט מהתחזית"
-                                  >
-                                    <Ban className="w-2.5 h-2.5" />
-                                    הסר
-                                  </button>
-                                )}
-                                {(item.isExcluded || item.isAmountOverridden) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleExcludeItem(item.bucketKey)}
+                                  className="text-[9px] text-rose-700 hover:text-rose-900 inline-flex items-center gap-0.5"
+                                  title="הסר את הפריט מהתחזית"
+                                >
+                                  <Ban className="w-2.5 h-2.5" />
+                                  הסר
+                                </button>
+                                {item.isAmountOverridden && (
                                   <button
                                     type="button"
                                     onClick={() => handleClearOverride(item.bucketKey)}
@@ -370,6 +373,33 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                             <td className="py-1">{item.description}</td>
                             <td className="py-1 text-amber-700">{item.monthsAppeared}/{f.closedMonthsCount}</td>
                             <td className="py-1 text-left font-bold text-amber-900">{renderCurrency(item.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {showHiddenItems && hiddenFixedItems.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-rose-700 font-semibold">פריטים שהסרת מהתחזית (לחץ "↺ שחזר" כדי להחזיר):</p>
+                    <table className="w-full text-[10px]">
+                      <tbody>
+                        {hiddenFixedItems.map(item => (
+                          <tr key={item.bucketKey} className="border-t border-rose-200">
+                            <td className="py-1 text-slate-600">{item.description}</td>
+                            <td className="py-1 text-slate-500">{item.monthsAppeared}/{f.closedMonthsCount}</td>
+                            <td className="py-1 text-slate-500">{renderCurrency(item.total)} YTD</td>
+                            <td className="py-1 text-center w-20">
+                              <button
+                                type="button"
+                                onClick={() => handleClearOverride(item.bucketKey)}
+                                className="text-[9px] text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5"
+                                title="החזר את הפריט לתחזית"
+                              >
+                                <RotateCcw className="w-2.5 h-2.5" />
+                                שחזר
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -412,30 +442,35 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
             <section className="border border-violet-200 rounded-xl bg-violet-50/30 p-5">
               <h3 className="text-lg font-bold text-violet-900 flex items-center gap-2 mb-4">
                 <TrendingDown className="w-5 h-5" />
-                תחזית 3: תזרים נטו לסוף שנה (אחרי הלוואות + משיכות)
+                תחזית 3: תזרים מזומנים פנוי לסוף שנה
               </h3>
               <div className="space-y-1">
                 <Row label="רווח לאחר מס (משוער)" value={f.profitAfterTax} bold />
-                <Row label="החזרי הלוואות שולמו YTD" value={f.loansYTDActual} negative />
+              </div>
+              <div className="mt-4 pt-3 border-t border-dashed border-violet-200">
+                <p className="text-xs font-semibold text-violet-700 mb-2">פירעון חוב (לא הוצאה תפעולית):</p>
+                <Row
+                  label="החזרי הלוואות שולמו YTD"
+                  value={f.loansYTDActual}
+                  negative
+                />
                 <Row
                   label="החזרי הלוואות צפויים"
                   value={f.loansRemainingForecast}
                   hint={`ממוצע ${renderCurrency(f.loansYTDActual / Math.max(1, f.closedMonthsCount))} × ${f.remainingMonthsCount} חודשים`}
                   negative
                 />
-                <Row label="משיכות פרטיות שולמו YTD" value={f.withdrawalsYTDActual} negative />
-                <Row
-                  label="משיכות פרטיות צפויות"
-                  value={f.withdrawalsRemainingForecast}
-                  hint={`ממוצע ${renderCurrency(f.withdrawalsYTDActual / Math.max(1, f.closedMonthsCount))} × ${f.remainingMonthsCount} חודשים`}
-                  negative
-                />
               </div>
               <div className="mt-4 pt-3 border-t border-violet-200">
-                <Row label="תזרים נטו ב-31.12 (כמה יישאר)" value={f.netCashFlowEoY} total />
+                <Row label="תזרים מזומנים פנוי ב-31.12" value={f.netCashFlowEoY} total />
               </div>
-              <div className="mt-3 text-[11px] text-violet-800 bg-white/70 rounded p-2">
-                💰 כולל קרן + ריבית של הלוואות וכל המשיכות הפרטיות (קבוצת personal). אם פנסיה ליאור או קה"ש שלך מסווגים כ-personal ואתה רוצה לכלול אותם בהוצאות התפעוליות, ערוך את התנועות ל-group=operational.
+              <div className="mt-3 text-[11px] text-violet-800 bg-white/70 rounded p-2 space-y-1">
+                <div>
+                  💰 <strong>פירעון חוב</strong> (קרן + ריבית של הלוואות) הוא תשלום שמקטין את המזומן אבל לא נחשב הוצאה תפעולית.
+                </div>
+                <div>
+                  💰 <strong>משיכות פרטיות</strong> (כולל מזונות) הן חלק מהרווח שאתה לוקח לעצמך - <strong>לא יורדות מהתחזית</strong>. הרווח הזמין למשיכה מוצג בסעיף "רווח לאחר מס".
+                </div>
               </div>
             </section>
           </div>
