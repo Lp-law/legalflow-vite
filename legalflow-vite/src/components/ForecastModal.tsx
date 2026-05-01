@@ -1,13 +1,16 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { X, TrendingUp, TrendingDown, Activity, Wallet, AlertCircle, Hand } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Activity, Wallet, AlertCircle, Ban, Pencil, RotateCcw } from 'lucide-react';
 import type { Transaction } from '../types';
-import { computeYearEndForecast, DEFAULT_PERSONAL_WITHDRAWAL_TOKENS } from '../utils/forecast';
+import { computeYearEndForecast } from '../utils/forecast';
 import {
-  getUserForecastWithdrawalTokens,
-  addToForecastWithdrawals,
-  removeFromForecastWithdrawals,
+  getForecastItemOverrides,
+  setForecastItemOverride,
+  removeForecastItemOverride,
+  getForecastMonthlyBuffer,
+  setForecastMonthlyBuffer,
   STORAGE_EVENT,
 } from '../services/storageService';
+import type { ForecastItemOverride } from '../services/storageService';
 
 interface ForecastModalProps {
   isOpen: boolean;
@@ -53,35 +56,80 @@ const Row: React.FC<{
 
 const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transactions }) => {
   const today = useMemo(() => new Date(), []);
-  const [userWithdrawalTokens, setUserWithdrawalTokens] = useState<string[]>(() => getUserForecastWithdrawalTokens());
+  const [overrides, setOverrides] = useState<Record<string, ForecastItemOverride>>(() => getForecastItemOverrides());
+  const [monthlyBuffer, setBuffer] = useState<number>(() => getForecastMonthlyBuffer());
+  const [bufferDraft, setBufferDraft] = useState<string>(() => String(getForecastMonthlyBuffer()));
+  const [editingAmountKey, setEditingAmountKey] = useState<string | null>(null);
+  const [amountDraft, setAmountDraft] = useState<string>('');
+
   const f = useMemo(
-    () => computeYearEndForecast(transactions, today, userWithdrawalTokens),
-    [transactions, today, userWithdrawalTokens],
+    () => computeYearEndForecast(transactions, today, overrides, monthlyBuffer),
+    [transactions, today, overrides, monthlyBuffer],
   );
+
   const [showFixedList, setShowFixedList] = useState(false);
   const [showExcludedList, setShowExcludedList] = useState(false);
-  const [showWithdrawalManager, setShowWithdrawalManager] = useState(false);
 
   useEffect(() => {
-    const handler = () => setUserWithdrawalTokens(getUserForecastWithdrawalTokens());
+    const handler = () => {
+      setOverrides(getForecastItemOverrides());
+      setBuffer(getForecastMonthlyBuffer());
+      setBufferDraft(String(getForecastMonthlyBuffer()));
+    };
     window.addEventListener(STORAGE_EVENT, handler);
     return () => window.removeEventListener(STORAGE_EVENT, handler);
   }, []);
 
-  const handleReclassifyAsWithdrawal = (description: string) => {
-    if (!description.trim()) return;
-    addToForecastWithdrawals(description.trim());
-    setUserWithdrawalTokens(getUserForecastWithdrawalTokens());
+  const handleExcludeItem = (bucketKey: string) => {
+    const current = overrides[bucketKey] ?? {};
+    const next = setForecastItemOverride(bucketKey, { ...current, excluded: true });
+    setOverrides(next);
   };
 
-  const handleRemoveWithdrawalToken = (token: string) => {
-    removeFromForecastWithdrawals(token);
-    setUserWithdrawalTokens(getUserForecastWithdrawalTokens());
+  const handleClearOverride = (bucketKey: string) => {
+    const next = removeForecastItemOverride(bucketKey);
+    setOverrides(next);
+  };
+
+  const handleStartAmountEdit = (bucketKey: string, currentAmount: number) => {
+    setEditingAmountKey(bucketKey);
+    setAmountDraft(String(Math.round(currentAmount)));
+  };
+
+  const handleSaveAmountOverride = (bucketKey: string) => {
+    const parsed = Number(amountDraft.replace(/[, ₪]/g, ''));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      alert('נא להזין סכום חוקי');
+      return;
+    }
+    const current = overrides[bucketKey] ?? {};
+    const next = setForecastItemOverride(bucketKey, { ...current, monthlyAmount: parsed });
+    setOverrides(next);
+    setEditingAmountKey(null);
+    setAmountDraft('');
+  };
+
+  const handleCancelAmountEdit = () => {
+    setEditingAmountKey(null);
+    setAmountDraft('');
+  };
+
+  const handleSaveBuffer = () => {
+    const parsed = Number(bufferDraft.replace(/[, ₪]/g, ''));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      alert('נא להזין סכום חוקי');
+      setBufferDraft(String(monthlyBuffer));
+      return;
+    }
+    const next = setForecastMonthlyBuffer(parsed);
+    setBuffer(next);
+    setBufferDraft(String(next));
   };
 
   if (!isOpen) return null;
 
   const noClosedMonths = f.closedMonthsCount === 0;
+  const hasAnyOverride = Object.keys(overrides).length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto pt-12">
@@ -96,14 +144,10 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
               נכון ל-{today.toLocaleDateString('he-IL')} · {f.closedMonthsCount} חודשים שנסגרו · {f.remainingMonthsCount} חודשים שנותרו
             </p>
             <p className="text-xs text-blue-600 mt-1">
-              ℹ התחזית מתעדכנת אוטומטית בכל פתיחה - ככל שעוברים חודשים, יש יותר נתונים בפועל ופחות הערכה.
+              ℹ התחזית מתעדכנת אוטומטית בכל פתיחה. ככל שעוברים חודשים, יש יותר נתונים בפועל ופחות הערכה.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 transition-colors"
-            aria-label="סגור"
-          >
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors" aria-label="סגור">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -111,9 +155,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
         {noClosedMonths ? (
           <div className="p-12 text-center">
             <AlertCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">
-              אין חודש שנסגר עדיין השנה. אי-אפשר לחשב תחזית.
-            </p>
+            <p className="text-slate-500">אין חודש שנסגר עדיין השנה. אי-אפשר לחשב תחזית.</p>
           </div>
         ) : (
           <div className="p-6 space-y-6">
@@ -121,7 +163,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
             <section className="border border-emerald-200 rounded-xl bg-emerald-50/30 p-5">
               <h3 className="text-lg font-bold text-emerald-900 flex items-center gap-2 mb-4">
                 <TrendingUp className="w-5 h-5" />
-                תחזית 1: רווח תפעולי לסוף שנה
+                תחזית 1: רווח לאחר הוצאות קבועות
               </h3>
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-1">
@@ -139,11 +181,11 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                   <Row label="סה״כ הכנסות צפויות" value={f.incomeTotal} bold />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-sm font-semibold text-emerald-800 mb-2">הוצאות תפעוליות</h4>
+                  <h4 className="text-sm font-semibold text-emerald-800 mb-2">הוצאות קבועות (תפעולי + פרטי)</h4>
                   <Row
                     label="הוצאות בפועל YTD"
                     value={f.operationalExpensesYTDActual}
-                    hint="כל ההוצאות התפעוליות שכבר ירדו (כולל חד-פעמיות)"
+                    hint="כל ההוצאות התפעוליות + משיכות פרטיות שכבר ירדו"
                     negative
                   />
                   <Row
@@ -152,29 +194,56 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                     hint={`${renderCurrency(f.avgFixedMonthlyExpense)} ממוצע קבוע × ${f.remainingMonthsCount} חודשים`}
                     negative
                   />
+                  {f.monthlyBufferAmount > 0 && (
+                    <Row
+                      label="באפר חודשי לבלתי צפוי"
+                      value={f.bufferRemainingForecast}
+                      hint={`${renderCurrency(f.monthlyBufferAmount)} × ${f.remainingMonthsCount} חודשים`}
+                      negative
+                    />
+                  )}
                   <Row label="סה״כ הוצאות צפויות" value={f.operationalExpensesTotal} bold negative />
                 </div>
               </div>
               <div className="mt-4 pt-3 border-t border-emerald-200">
-                <Row label="רווח תפעולי צפוי לסוף שנה" value={f.operatingProfit} total />
+                <Row label="רווח צפוי לסוף שנה (אחרי הוצאות קבועות)" value={f.operatingProfit} total />
               </div>
+
               <div className="mt-3 text-[11px] text-emerald-800 bg-white/70 rounded p-2 space-y-2">
+                {/* Buffer input */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="font-semibold">באפר חודשי לבלתי צפוי:</label>
+                  <input
+                    type="number"
+                    value={bufferDraft}
+                    onChange={(e) => setBufferDraft(e.target.value)}
+                    onBlur={handleSaveBuffer}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    min="0"
+                    step="100"
+                    className="w-24 border border-emerald-300 rounded px-2 py-0.5 text-[11px]"
+                  />
+                  <span className="text-emerald-700">₪/חודש (יורד בתחזית לעוד {f.remainingMonthsCount} חודשים = {renderCurrency(f.bufferRemainingForecast)})</span>
+                </div>
+
                 <div>
                   💡 הוצאות "קבועות" = מופיעות ב-≥50% מ-{f.closedMonthsCount} החודשים שנסגרו (לפחות {Math.max(1, Math.ceil(f.closedMonthsCount * 0.5))} חודשים).
-                  ממוצע חודשי קבוע: <strong>{renderCurrency(f.avgFixedMonthlyExpense)}</strong>.
+                  ממוצע חודשי קבוע (אחרי overrides): <strong>{renderCurrency(f.avgFixedMonthlyExpense)}</strong>.
                 </div>
+
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {f.fixedExpenseBreakdown.length > 0 && (
                     <button onClick={() => setShowFixedList(s => !s)} className="text-blue-700 hover:underline">
-                      {showFixedList ? '↑ הסתר' : '↓ הצג'} {f.fixedExpenseBreakdown.length} הוצאות שזוהו כקבועות (סה"כ {renderCurrency(f.fixedExpensesYTDTotal)})
+                      {showFixedList ? '↑ הסתר' : '↓ הצג'} {f.fixedExpenseBreakdown.length} הוצאות שזוהו כקבועות
                     </button>
                   )}
                   {f.excludedOneTimeDescriptions.length > 0 && (
                     <button onClick={() => setShowExcludedList(s => !s)} className="text-amber-700 hover:underline">
-                      {showExcludedList ? '↑ הסתר' : '↓ הצג'} {f.excludedOneTimeDescriptions.length} הוצאות חד-פעמיות שהוצאו ({renderCurrency(f.excludedOneTimeAmount)})
+                      {showExcludedList ? '↑ הסתר' : '↓ הצג'} {f.excludedOneTimeDescriptions.length} הוצאות חד-פעמיות (לא בתחזית) ({renderCurrency(f.excludedOneTimeAmount)})
                     </button>
                   )}
                 </div>
+
                 {showFixedList && (
                   <div className="space-y-1">
                     <table className="w-full text-[10px]">
@@ -182,52 +251,129 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                         <tr>
                           <th className="text-right py-1">תיאור</th>
                           <th className="text-right py-1">חודשים</th>
-                          <th className="text-right py-1">ממוצע/חודש</th>
+                          <th className="text-right py-1">ממוצע</th>
                           <th className="text-right py-1">סה"כ YTD</th>
-                          <th className="text-center py-1 w-20">פעולה</th>
+                          <th className="text-center py-1 w-32">פעולה</th>
                         </tr>
                       </thead>
                       <tbody>
                         {f.fixedExpenseBreakdown.map(item => (
-                          <tr key={item.description} className="border-t border-emerald-200">
-                            <td className="py-1">{item.description}</td>
+                          <tr
+                            key={item.bucketKey}
+                            className={`border-t border-emerald-200 ${item.isExcluded ? 'opacity-50 line-through' : ''}`}
+                          >
+                            <td className="py-1">
+                              {item.description}
+                              {item.isAmountOverridden && !item.isExcluded && (
+                                <span className="mr-1 inline-block text-[9px] bg-blue-100 text-blue-700 px-1 rounded">override</span>
+                              )}
+                              {item.isExcluded && (
+                                <span className="mr-1 inline-block text-[9px] bg-rose-100 text-rose-700 px-1 rounded">הוסר</span>
+                              )}
+                            </td>
                             <td className="py-1 text-emerald-700">{item.monthsAppeared}/{f.closedMonthsCount}</td>
-                            <td className="py-1 text-emerald-700">{renderCurrency(item.avgPerMonth)}</td>
+                            <td className="py-1 text-emerald-700">
+                              {editingAmountKey === item.bucketKey ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    value={amountDraft}
+                                    onChange={(e) => setAmountDraft(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveAmountOverride(item.bucketKey);
+                                      if (e.key === 'Escape') handleCancelAmountEdit();
+                                    }}
+                                    autoFocus
+                                    className="w-16 border border-emerald-400 rounded px-1 py-0.5 text-[10px]"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveAmountOverride(item.bucketKey)}
+                                    className="text-[9px] text-emerald-700 font-bold"
+                                  >
+                                    ✓
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelAmountEdit}
+                                    className="text-[9px] text-slate-500"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <span>
+                                  {renderCurrency(item.effectiveMonthlyAmount)}
+                                  {item.isAmountOverridden && !item.isExcluded && (
+                                    <span className="text-[9px] text-slate-500 ml-1">(היה {renderCurrency(item.avgPerMonth)})</span>
+                                  )}
+                                </span>
+                              )}
+                            </td>
                             <td className="py-1 font-bold text-emerald-900">{renderCurrency(item.total)}</td>
                             <td className="py-1 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleReclassifyAsWithdrawal(item.description)}
-                                className="text-[9px] text-violet-700 hover:text-violet-900 inline-flex items-center gap-0.5"
-                                title="סמן כמשיכה פרטית - יוצא מתחזית 1 ויורד בתחזית 3"
-                              >
-                                <Hand className="w-2.5 h-2.5" />
-                                סווג כמשיכה
-                              </button>
+                              <div className="flex gap-1 justify-center flex-wrap">
+                                {!item.isExcluded && editingAmountKey !== item.bucketKey && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartAmountEdit(item.bucketKey, item.effectiveMonthlyAmount)}
+                                    className="text-[9px] text-blue-700 hover:text-blue-900 inline-flex items-center gap-0.5"
+                                    title="עדכן את הסכום החודשי המוערך"
+                                  >
+                                    <Pencil className="w-2.5 h-2.5" />
+                                    סכום
+                                  </button>
+                                )}
+                                {!item.isExcluded && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExcludeItem(item.bucketKey)}
+                                    className="text-[9px] text-rose-700 hover:text-rose-900 inline-flex items-center gap-0.5"
+                                    title="הסר את הפריט מהתחזית"
+                                  >
+                                    <Ban className="w-2.5 h-2.5" />
+                                    הסר
+                                  </button>
+                                )}
+                                {(item.isExcluded || item.isAmountOverridden) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleClearOverride(item.bucketKey)}
+                                    className="text-[9px] text-slate-500 hover:text-slate-800 inline-flex items-center gap-0.5"
+                                    title="בטל override - חזור לחישוב אוטומטי"
+                                  >
+                                    <RotateCcw className="w-2.5 h-2.5" />
+                                    בטל
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    {hasAnyOverride && (
+                      <p className="text-[10px] text-blue-700 italic mt-1">
+                        💡 שינויים נשמרים אוטומטית. לחיצה על "↺ בטל" מחזירה לחישוב אוטומטי.
+                      </p>
+                    )}
                   </div>
                 )}
+
                 {showExcludedList && (
                   <div className="space-y-1">
-                    <p className="text-[10px] text-amber-700 font-semibold">הוצאות שהופיעו רק ב-{Math.max(1, Math.ceil(f.closedMonthsCount * 0.5)) - 1} חודשים או פחות (חד-פעמיות):</p>
+                    <p className="text-[10px] text-amber-700 font-semibold">הוצאות שהופיעו ב-{Math.max(1, Math.ceil(f.closedMonthsCount * 0.5)) - 1} חודשים או פחות (לא נכללות בצפי):</p>
                     <table className="w-full text-[10px]">
                       <tbody>
                         {f.excludedOneTimeDescriptions.map(item => (
                           <tr key={item.description} className="border-t border-amber-200">
                             <td className="py-1">{item.description}</td>
-                            <td className="py-1 text-amber-700">{item.monthsAppeared}/{f.closedMonthsCount} חודשים</td>
+                            <td className="py-1 text-amber-700">{item.monthsAppeared}/{f.closedMonthsCount}</td>
                             <td className="py-1 text-left font-bold text-amber-900">{renderCurrency(item.total)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    <p className="text-[10px] text-amber-700 italic">
-                      אם משהו ברשימה הזו אמור להיות "קבוע" - תיתכן שיש בתיאור וריאציות שלא זוהו כזהות. אפשר לאחד אותן ידנית בתזרים.
-                    </p>
                   </div>
                 )}
               </div>
@@ -240,11 +386,11 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                 תחזית 2: רווח לאחר מס (משוער)
               </h3>
               <div className="space-y-1">
-                <Row label="רווח תפעולי צפוי" value={f.operatingProfit} bold />
+                <Row label="רווח אחרי הוצאות קבועות" value={f.operatingProfit} bold />
                 <Row
                   label="מקדמות מס הכנסה YTD (חודשים שנסגרו)"
                   value={f.taxAdvancesYTDActual}
-                  hint="כל הרשומות מקבוצת מס שאינן מע״מ - שולם או צפוי"
+                  hint="כל הרשומות מקבוצת מס שאינן מע״מ"
                   negative
                 />
                 <Row
@@ -258,7 +404,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
                 <Row label="רווח לאחר מס (משוער)" value={f.profitAfterTax} total />
               </div>
               <div className="mt-3 text-[11px] text-amber-800 bg-white/70 rounded p-2">
-                ⚠ מקדמות הן פירעון על חשבון. החיוב הסופי בהגשת הדו״ח השנתי עשוי להיות שונה (החזר או השלמה).
+                ⚠ מקדמות הן פירעון על חשבון. החיוב הסופי בהגשת הדו״ח השנתי עשוי להיות שונה.
               </div>
             </section>
 
@@ -266,85 +412,23 @@ const ForecastModal: React.FC<ForecastModalProps> = ({ isOpen, onClose, transact
             <section className="border border-violet-200 rounded-xl bg-violet-50/30 p-5">
               <h3 className="text-lg font-bold text-violet-900 flex items-center gap-2 mb-4">
                 <TrendingDown className="w-5 h-5" />
-                תחזית 3: תזרים נטו לסוף שנה (אחרי הכל)
+                תחזית 3: תזרים נטו לסוף שנה (אחרי הלוואות)
               </h3>
               <div className="space-y-1">
                 <Row label="רווח לאחר מס (משוער)" value={f.profitAfterTax} bold />
-                <Row
-                  label="החזרי הלוואות שולמו YTD"
-                  value={f.loansYTDActual}
-                  negative
-                />
+                <Row label="החזרי הלוואות שולמו YTD" value={f.loansYTDActual} negative />
                 <Row
                   label="החזרי הלוואות צפויים"
                   value={f.loansRemainingForecast}
                   hint={`ממוצע ${renderCurrency(f.loansYTDActual / Math.max(1, f.closedMonthsCount))} × ${f.remainingMonthsCount} חודשים`}
                   negative
                 />
-                <Row
-                  label="משיכות פרטיות שולמו YTD"
-                  value={f.withdrawalsYTDActual}
-                  negative
-                />
-                <Row
-                  label="משיכות פרטיות צפויות"
-                  value={f.withdrawalsRemainingForecast}
-                  hint={`ממוצע ${renderCurrency(f.withdrawalsYTDActual / Math.max(1, f.closedMonthsCount))} × ${f.remainingMonthsCount} חודשים`}
-                  negative
-                />
               </div>
               <div className="mt-4 pt-3 border-t border-violet-200">
                 <Row label="תזרים נטו ב-31.12 (כמה יישאר)" value={f.netCashFlowEoY} total />
               </div>
-              <div className="mt-3 text-[11px] text-violet-800 bg-white/70 rounded p-2 space-y-2">
-                <div>
-                  💰 משיכות פרטיות = פריטים שסיווגת כמשיכה. ברירת מחדל כוללת "מזונות" - כל היתר מקבוצת personal נחשבים הוצאה עסקית ויורדים בתחזית 1.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowWithdrawalManager(s => !s)}
-                  className="text-blue-700 hover:underline"
-                >
-                  {showWithdrawalManager ? '↑ הסתר ניהול משיכות' : '↓ נהל סיווג משיכות פרטיות'}
-                </button>
-                {showWithdrawalManager && (
-                  <div className="space-y-2 pt-2">
-                    <div>
-                      <p className="text-[10px] font-semibold text-violet-700 mb-1">משיכות מובנות (תמיד פעילות):</p>
-                      <div className="flex flex-wrap gap-1">
-                        {DEFAULT_PERSONAL_WITHDRAWAL_TOKENS.map(item => (
-                          <span key={item} className="inline-block text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    {userWithdrawalTokens.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-violet-700 mb-1">סיווג שלך ({userWithdrawalTokens.length}):</p>
-                        <div className="flex flex-wrap gap-1">
-                          {userWithdrawalTokens.map(token => (
-                            <span key={token} className="inline-flex items-center gap-1 text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">
-                              {token}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveWithdrawalToken(token)}
-                                className="hover:text-violet-900"
-                                aria-label="החזר להוצאות עסקיות"
-                                title="החזר להוצאות עסקיות (יחזור לתחזית 1)"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-[10px] text-violet-600 italic">
-                      להוסיף פריט - לך לתחזית 1, פתח את "הצג הוצאות שזוהו כקבועות", ולחץ "🤚 סווג כמשיכה" ליד הפריט.
-                    </p>
-                  </div>
-                )}
+              <div className="mt-3 text-[11px] text-violet-800 bg-white/70 rounded p-2">
+                💰 משיכות פרטיות (כולל מזונות וקה"ש/פנסיה אישית) כבר נכללות בתחזית 1 כהוצאות קבועות. תחזית 3 מורידה רק החזרי הלוואות (קרן + ריבית).
               </div>
             </section>
           </div>

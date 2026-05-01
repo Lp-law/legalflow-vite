@@ -1,24 +1,20 @@
 import type { Transaction } from '../types';
+import type { ForecastItemOverride } from '../services/storageService';
 import { parseDateKey } from './date';
 import { normalizeForBucketKey } from './nextMonthAutoFill';
 
-// Items reclassified as "personal withdrawals" - excluded from F1
-// (operating expenses) and subtracted instead in F3 (net cash flow).
-// Default seed; user can extend or remove via the modal.
-export const DEFAULT_PERSONAL_WITHDRAWAL_TOKENS: string[] = [
-  'מזונות',
-];
-
-const matchesWithdrawalToken = (
-  description: string,
+// Stable bucket key based on category (or description fallback) + group.
+// Identical to what computeYearEndForecast uses internally so the modal
+// can address overrides by the same key.
+export const buildForecastBucketKey = (
   category: string,
-  tokens: string[],
-): boolean => {
-  const haystack = `${normalizeForBucketKey(description)} ${normalizeForBucketKey(category)}`;
-  return tokens.some(t => {
-    const normalized = normalizeForBucketKey(t);
-    return normalized.length > 0 && haystack.includes(normalized);
-  });
+  description: string,
+  group: string,
+): string => {
+  const cat = (category || '').trim();
+  const desc = (description || '').trim();
+  if (cat) return `cat:${normalizeForBucketKey(cat)}|${group}`;
+  return `desc:${normalizeForBucketKey(desc)}|${group}`;
 };
 
 export type ForecastResult = {
@@ -33,14 +29,25 @@ export type ForecastResult = {
   incomeRemainingForecast: number;
   incomeTotal: number;
 
-  // Operational expenses
-  operationalExpensesYTDActual: number; // all operational that already happened
+  // Operational + personal expenses
+  operationalExpensesYTDActual: number; // all operational+personal that already happened
   fixedExpensesYTDTotal: number; // only fixed (appears in >=50% of closed months)
-  fixedExpenseBreakdown: Array<{ description: string; total: number; monthsAppeared: number; avgPerMonth: number }>;
+  fixedExpenseBreakdown: Array<{
+    bucketKey: string;
+    description: string;
+    total: number;
+    monthsAppeared: number;
+    avgPerMonth: number; // raw computed avg
+    effectiveMonthlyAmount: number; // after override applied (used for projection)
+    isExcluded: boolean;
+    isAmountOverridden: boolean;
+  }>;
   excludedOneTimeDescriptions: Array<{ description: string; total: number; monthsAppeared: number }>;
   excludedOneTimeAmount: number;
-  avgFixedMonthlyExpense: number;
+  avgFixedMonthlyExpense: number; // sum of all effective monthly amounts
   fixedExpensesRemainingForecast: number;
+  monthlyBufferAmount: number;
+  bufferRemainingForecast: number;
   operationalExpensesTotal: number;
 
   // Forecast 1 result
@@ -89,9 +96,9 @@ const PROJECTED_TAX_RATE = 0.14;
 export const computeYearEndForecast = (
   transactions: Transaction[],
   today: Date = new Date(),
-  userWithdrawalTokens: string[] = [],
+  itemOverrides: Record<string, ForecastItemOverride> = {},
+  monthlyBuffer: number = 0,
 ): ForecastResult => {
-  const allWithdrawalTokens = [...DEFAULT_PERSONAL_WITHDRAWAL_TOKENS, ...userWithdrawalTokens];
   const year = today.getFullYear();
   const currentMonthIndex = today.getMonth(); // 0..11
   const startOfYear = new Date(year, 0, 1);
@@ -132,15 +139,10 @@ export const computeYearEndForecast = (
   const incomeTotal = incomeYTDActual + incomeRemainingForecast;
 
   // ---- Recurring business expenses for F1 ----
-  // Includes operational AND personal-group items, EXCEPT items that the
-  // user reclassified as "personal withdrawals" (which go to F3).
-  const operationalYTD = ytdCompleted.filter(t => {
-    if (t.group === 'operational') return true;
-    if (t.group === 'personal') {
-      return !matchesWithdrawalToken(t.description || '', t.category || '', allWithdrawalTokens);
-    }
-    return false;
-  });
+  // Includes both operational and personal-group items.
+  const operationalYTD = ytdCompleted.filter(
+    t => t.group === 'operational' || t.group === 'personal',
+  );
   const operationalExpensesYTDActual = operationalYTD.reduce(
     (s, t) => s + Math.abs(Number(t.amount) || 0),
     0,
@@ -151,20 +153,13 @@ export const computeYearEndForecast = (
   // category collapses all per-employee/per-month variants into one
   // bucket. Fall back to description when category is empty.
   const fixedThreshold = Math.max(1, Math.ceil(closedMonthsCount * 0.5));
-  type Group = { months: Set<string>; total: number; description: string };
-  const expenseBuckets = new Map<string, Group>();
+  type Bucket = { months: Set<string>; total: number; description: string };
+  const expenseBuckets = new Map<string, Bucket>();
   operationalYTD.forEach(t => {
     const cat = (t.category || '').trim();
     const desc = (t.description || '').trim();
-    let bucketKey: string;
-    let displayName: string;
-    if (cat) {
-      bucketKey = `cat:${normalizeForBucketKey(cat)}|${t.group}`;
-      displayName = cat;
-    } else {
-      bucketKey = `desc:${normalizeForBucketKey(desc)}|${t.group}`;
-      displayName = desc || '(ללא תיאור)';
-    }
+    const bucketKey = buildForecastBucketKey(cat, desc, t.group);
+    const displayName = cat || desc || '(ללא תיאור)';
     const tDate = parseDateKey(t.date);
     const mk = monthKeyOf(tDate);
     const existing = expenseBuckets.get(bucketKey);
@@ -183,16 +178,31 @@ export const computeYearEndForecast = (
 
   let fixedExpensesYTDTotal = 0;
   let excludedOneTimeAmount = 0;
-  const fixedExpenseBreakdown: Array<{ description: string; total: number; monthsAppeared: number; avgPerMonth: number }> = [];
+  let totalEffectiveMonthlyForFixed = 0;
+  const fixedExpenseBreakdown: ForecastResult['fixedExpenseBreakdown'] = [];
   const excludedOneTimeDescriptions: Array<{ description: string; total: number; monthsAppeared: number }> = [];
-  expenseBuckets.forEach(g => {
+  expenseBuckets.forEach((g, bucketKey) => {
     if (g.months.size >= fixedThreshold) {
-      fixedExpensesYTDTotal += g.total;
+      const override = itemOverrides[bucketKey];
+      const isExcluded = Boolean(override?.excluded);
+      const rawAvg = g.total / g.months.size;
+      const isAmountOverridden = typeof override?.monthlyAmount === 'number';
+      const effectiveMonthlyAmount = isExcluded
+        ? 0
+        : isAmountOverridden
+          ? (override!.monthlyAmount as number)
+          : rawAvg;
+      fixedExpensesYTDTotal += g.total; // YTD reflects historical reality
+      totalEffectiveMonthlyForFixed += effectiveMonthlyAmount;
       fixedExpenseBreakdown.push({
+        bucketKey,
         description: g.description,
         total: g.total,
         monthsAppeared: g.months.size,
-        avgPerMonth: g.total / g.months.size,
+        avgPerMonth: rawAvg,
+        effectiveMonthlyAmount,
+        isExcluded,
+        isAmountOverridden,
       });
     } else {
       excludedOneTimeAmount += g.total;
@@ -206,11 +216,13 @@ export const computeYearEndForecast = (
   fixedExpenseBreakdown.sort((a, b) => b.total - a.total);
   excludedOneTimeDescriptions.sort((a, b) => b.total - a.total);
 
-  const avgFixedMonthlyExpense =
-    closedMonthsCount > 0 ? fixedExpensesYTDTotal / closedMonthsCount : 0;
+  // Effective avg = sum of effective monthly amounts (after overrides applied)
+  const avgFixedMonthlyExpense = totalEffectiveMonthlyForFixed;
   const fixedExpensesRemainingForecast = avgFixedMonthlyExpense * remainingMonthsCount;
+  const monthlyBufferAmount = Number.isFinite(monthlyBuffer) && monthlyBuffer > 0 ? monthlyBuffer : 0;
+  const bufferRemainingForecast = monthlyBufferAmount * remainingMonthsCount;
   const operationalExpensesTotal =
-    operationalExpensesYTDActual + fixedExpensesRemainingForecast;
+    operationalExpensesYTDActual + fixedExpensesRemainingForecast + bufferRemainingForecast;
 
   // ---- Forecast 1 ----
   const operatingProfit = incomeTotal - operationalExpensesTotal;
@@ -243,20 +255,11 @@ export const computeYearEndForecast = (
   const loansRemainingForecast = avgMonthlyLoans * remainingMonthsCount;
   const totalLoans = loansYTDActual + loansRemainingForecast;
 
-  // ---- Personal withdrawals (only items reclassified by user) ----
-  // Default: "מזונות" - user can extend via the modal.
-  const withdrawalsYTDActual = ytdCompleted
-    .filter(
-      t =>
-        t.group === 'personal' &&
-        matchesWithdrawalToken(t.description || '', t.category || '', allWithdrawalTokens),
-    )
-    .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
-  const avgMonthlyWithdrawals =
-    closedMonthsCount > 0 ? withdrawalsYTDActual / closedMonthsCount : 0;
-  const withdrawalsRemainingForecast =
-    avgMonthlyWithdrawals * remainingMonthsCount;
-  const totalWithdrawals = withdrawalsYTDActual + withdrawalsRemainingForecast;
+  // ---- Personal withdrawals: removed from forecast ----
+  // F3 only subtracts loans. Personal items are already counted in F1.
+  const withdrawalsYTDActual = 0;
+  const withdrawalsRemainingForecast = 0;
+  const totalWithdrawals = 0;
 
   const netCashFlowEoY = profitAfterTax - totalLoans - totalWithdrawals;
 
@@ -276,6 +279,8 @@ export const computeYearEndForecast = (
     excludedOneTimeAmount,
     avgFixedMonthlyExpense,
     fixedExpensesRemainingForecast,
+    monthlyBufferAmount,
+    bufferRemainingForecast,
     operationalExpensesTotal,
     operatingProfit,
     taxAdvancesYTDActual,

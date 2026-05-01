@@ -9,7 +9,9 @@ const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
 const STORAGE_KEY_MEDICAL_TOKENS = 'legalflow_medical_dept_tokens_v1';
 const STORAGE_KEY_TX_DEPT_OVERRIDES = 'legalflow_tx_dept_overrides_v1';
 const STORAGE_KEY_AUTOFILL_BLACKLIST = 'legalflow_autofill_blacklist_v1';
-const STORAGE_KEY_FORECAST_EXCLUSIONS = 'legalflow_forecast_exclusions_v1';
+const STORAGE_KEY_FORECAST_OVERRIDES = 'legalflow_forecast_item_overrides_v1';
+const STORAGE_KEY_FORECAST_BUFFER = 'legalflow_forecast_monthly_buffer_v1';
+const FORECAST_BUFFER_DEFAULT = 7500;
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 
 const emitStorageChange = (key: string) => {
@@ -463,45 +465,78 @@ export const removeTransactionDeptOverride = (
   return rest;
 };
 
-// --- Forecast: items reclassified as personal withdrawals ---
-// By default, the year-end forecast treats all personal-group recurring
-// expenses as part of the "fixed business expenses" base (F1). Items
-// added here are reclassified as "personal withdrawals" - excluded from
-// F1 and instead subtracted in F3.
+// --- Forecast: per-item overrides + monthly buffer ---
+// Allows the user to fine-tune the year-end forecast.
+//   - excluded: skip this bucket entirely from forecast projection
+//   - monthlyAmount: replace the auto-computed monthly average
 
-export const getUserForecastWithdrawalTokens = (): string[] => {
-  const stored = localStorage.getItem(STORAGE_KEY_FORECAST_EXCLUSIONS);
-  if (!stored) return [];
+export type ForecastItemOverride = {
+  excluded?: boolean;
+  monthlyAmount?: number;
+};
+
+const sanitizeForecastOverrides = (raw: unknown): Record<string, ForecastItemOverride> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const result: Record<string, ForecastItemOverride> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof key !== 'string' || !key.trim()) continue;
+    if (!value || typeof value !== 'object') continue;
+    const v = value as Partial<ForecastItemOverride>;
+    const override: ForecastItemOverride = {};
+    if (v.excluded === true) override.excluded = true;
+    if (typeof v.monthlyAmount === 'number' && Number.isFinite(v.monthlyAmount) && v.monthlyAmount >= 0) {
+      override.monthlyAmount = v.monthlyAmount;
+    }
+    if (Object.keys(override).length > 0) {
+      result[key] = override;
+    }
+  }
+  return result;
+};
+
+export const getForecastItemOverrides = (): Record<string, ForecastItemOverride> => {
+  const stored = localStorage.getItem(STORAGE_KEY_FORECAST_OVERRIDES);
+  if (!stored) return {};
   try {
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-      .map(x => x.trim());
+    return sanitizeForecastOverrides(JSON.parse(stored));
   } catch {
-    return [];
+    return {};
   }
 };
 
-export const addToForecastWithdrawals = (token: string): string[] => {
-  const trimmed = token.trim();
-  if (!trimmed) return getUserForecastWithdrawalTokens();
-  const current = getUserForecastWithdrawalTokens();
-  if (current.includes(trimmed)) return current;
-  const updated = [...current, trimmed];
-  localStorage.setItem(STORAGE_KEY_FORECAST_EXCLUSIONS, JSON.stringify(updated));
-  emitStorageChange('forecast_exclusions');
-  return updated;
+export const setForecastItemOverride = (
+  key: string,
+  override: ForecastItemOverride,
+): Record<string, ForecastItemOverride> => {
+  if (!key.trim()) return getForecastItemOverrides();
+  const current = getForecastItemOverrides();
+  const next = { ...current, [key]: override };
+  localStorage.setItem(STORAGE_KEY_FORECAST_OVERRIDES, JSON.stringify(next));
+  emitStorageChange('forecast_item_overrides');
+  return next;
 };
 
-export const removeFromForecastWithdrawals = (token: string): string[] => {
-  const trimmed = token.trim();
-  const current = getUserForecastWithdrawalTokens();
-  const updated = current.filter(x => x !== trimmed);
-  if (updated.length === current.length) return current;
-  localStorage.setItem(STORAGE_KEY_FORECAST_EXCLUSIONS, JSON.stringify(updated));
-  emitStorageChange('forecast_exclusions');
-  return updated;
+export const removeForecastItemOverride = (key: string): Record<string, ForecastItemOverride> => {
+  const current = getForecastItemOverrides();
+  if (!(key in current)) return current;
+  const { [key]: _removed, ...rest } = current;
+  localStorage.setItem(STORAGE_KEY_FORECAST_OVERRIDES, JSON.stringify(rest));
+  emitStorageChange('forecast_item_overrides');
+  return rest;
+};
+
+export const getForecastMonthlyBuffer = (): number => {
+  const stored = localStorage.getItem(STORAGE_KEY_FORECAST_BUFFER);
+  if (stored === null) return FORECAST_BUFFER_DEFAULT;
+  const parsed = Number(stored);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : FORECAST_BUFFER_DEFAULT;
+};
+
+export const setForecastMonthlyBuffer = (value: number): number => {
+  if (!Number.isFinite(value) || value < 0) return getForecastMonthlyBuffer();
+  localStorage.setItem(STORAGE_KEY_FORECAST_BUFFER, String(value));
+  emitStorageChange('forecast_monthly_buffer');
+  return value;
 };
 
 // --- Auto-fill blacklist (descriptions to skip in next-month suggestions) ---
