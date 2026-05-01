@@ -45,11 +45,13 @@ const FeeSummaryModal: React.FC<FeeSummaryModalProps> = ({
 
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
+  const [clientNameSearch, setClientNameSearch] = useState('');
 
   const { groupedData, grandTotal } = useMemo(() => {
     const start = parseDateKey(startDate);
     const end = parseDateKey(endDate);
     end.setHours(23, 59, 59, 999);
+    const normalizedSearch = clientNameSearch.trim() ? normalize(clientNameSearch) : '';
 
     const buckets: Record<ClientBucket, { label: string; transactions: Transaction[]; total: number }> =
       SPECIAL_CLIENTS.reduce((acc, client) => {
@@ -72,6 +74,13 @@ const FeeSummaryModal: React.FC<FeeSummaryModalProps> = ({
         if (date.getTime() < start.getTime() || date.getTime() > end.getTime()) {
           return;
         }
+        if (normalizedSearch) {
+          const matchesDescription = normalize(transaction.description).includes(normalizedSearch);
+          const matchesReference = normalize(transaction.clientReference).includes(normalizedSearch);
+          if (!matchesDescription && !matchesReference) {
+            return;
+          }
+        }
         totalIncome += transaction.amount;
         const bucketId = resolveBucket(transaction.description);
         buckets[bucketId].transactions.push(transaction);
@@ -85,7 +94,7 @@ const FeeSummaryModal: React.FC<FeeSummaryModalProps> = ({
       groupedData: buckets,
       grandTotal: totalIncome,
     };
-  }, [transactions, startDate, endDate]);
+  }, [transactions, startDate, endDate, clientNameSearch]);
 
   if (!isOpen) {
     return null;
@@ -98,9 +107,9 @@ const FeeSummaryModal: React.FC<FeeSummaryModalProps> = ({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-200">
         <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">סיכום שכר טרחה לפי סוג לקוח</h2>
+            <h2 className="text-2xl font-bold text-slate-900">סיכום שכר טרחה לפי לקוח</h2>
             <p className="text-sm text-slate-500 mt-1">
-              פילוח תרומת הלקוחות המיוחדים לשכר הטרחה בתקופה נבחרת
+              פילוח תרומת הלקוחות לשכר הטרחה בתקופה נבחרת. אפשר לסנן לפי שם לקוח.
             </p>
           </div>
           <button
@@ -138,8 +147,35 @@ const FeeSummaryModal: React.FC<FeeSummaryModalProps> = ({
                   className="mt-1 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
                 />
               </label>
+              <label className="text-xs font-medium text-slate-500 flex flex-col flex-1 min-w-[200px]">
+                שם לקוח (אופציונלי)
+                <div className="relative mt-1">
+                  <input
+                    type="text"
+                    value={clientNameSearch}
+                    onChange={(e) => setClientNameSearch(e.target.value)}
+                    placeholder="הקלד חלק משם הלקוח..."
+                    className="w-full border border-slate-200 rounded-lg px-3 py-1.5 pl-8 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  />
+                  {clientNameSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setClientNameSearch('')}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                      aria-label="נקה חיפוש"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </label>
             </div>
           </div>
+          {clientNameSearch.trim() && (
+            <p className="mt-3 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              מסנן לפי: <span className="font-semibold">"{clientNameSearch}"</span> - מוצגות רק תנועות שתואמות לשם זה (בתיאור או באסמכתא).
+            </p>
+          )}
         </div>
 
         <div className="p-6 border-b border-slate-100">
