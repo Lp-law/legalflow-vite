@@ -41,14 +41,17 @@ const HEBREW_MONTHS = [
 export const normalizeForBucketKey = (s: string | undefined | null): string => {
   if (!s) return '';
   let result = s.toLowerCase();
-  // Remove year tokens (1900-2099)
-  result = result.replace(/(19|20)\d{2}/g, '');
-  // Remove date patterns like 01/2026, 1.06, 31-12, etc.
+  // Remove date patterns FIRST (otherwise stripping the year separately can
+  // leave dangling digits like "01/" from "01/2026").
   result = result.replace(/\d{1,2}[\/.\-]\d{1,4}/g, '');
+  // Remove leftover year tokens (1900-2099)
+  result = result.replace(/(19|20)\d{2}/g, '');
   // Remove month names (sort longer first so "ספטמבר" matches before "ספט")
   HEBREW_MONTHS.slice().sort((a, b) => b.length - a.length).forEach(month => {
     result = result.split(month).join('');
   });
+  // Remove any leftover standalone digits (e.g., '01' alone, '5')
+  result = result.replace(/\d+/g, '');
   // Remove whitespace and punctuation
   result = result.replace(/[\s"'״׳\-_.()/\\,]+/g, '');
   return result.trim();
