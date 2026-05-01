@@ -6,7 +6,7 @@ import {
 import type { Transaction } from '../types';
 import type { ForecastResult } from '../services/forecastService';
 import { CATEGORIES } from '../constants';
-import { TrendingUp, TrendingDown, Wallet, Scale, Info, Activity, Download } from 'lucide-react';
+import { TrendingUp, TrendingDown, Scale, Info, Activity, Download } from 'lucide-react';
 import { exportToCSV } from '../services/exportService';
 import { normalize, buildLedgerMapForRange } from '../utils/cashflow';
 import type { CashflowRow } from '../utils/cashflow';
@@ -262,7 +262,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         const amount = normalize(t.amount);
         const absAmount = Math.abs(amount);
 
-        if (t.group === 'fee' || t.group === 'other_income') {
+        if (t.group === 'fee') {
+          // שכר טרחה מוזן ברוטו (כולל מע"מ); ההכנסה האמיתית היא הנטו
+          income += absAmount / 1.18;
+        } else if (t.group === 'other_income') {
+          // הכנסות אחרות לרוב לא חייבות מע"מ - נחשבות כפי שהוזנו
           income += absAmount;
         } else if (t.group === 'bank_adjustment') {
           if (amount > 0) income += amount;
@@ -371,87 +375,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     exportToCSV('dashboard_overview.csv', headers, rows);
   };
 
-  const BalanceHeroCard = ({
-    title,
-    value,
-    icon: Icon,
-    accentBgClass,
-    accentIconClass,
-    subtitle,
-  }: {
-    title: string;
-    value: number;
-    icon: React.ComponentType<any>;
-    accentBgClass: string;
-    accentIconClass: string;
-    subtitle: string;
-  }) => (
-    <div className={`rounded-2xl shadow-lg border border-white/10 p-6 flex flex-col gap-4 ${accentBgClass}`}>
-      <div className="flex items-center gap-3">
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-white/10 border border-white/10 ${accentIconClass}`}>
-          <Icon className="w-6 h-6" />
-        </div>
-        <p className="text-base font-semibold text-white">{title}</p>
-      </div>
-      <p className="text-4xl font-bold text-[var(--law-gold)]">₪{value.toLocaleString()}</p>
-      <p className="text-sm text-slate-300">{subtitle}</p>
-    </div>
-  );
-
   return (
     <div className="space-y-6 text-slate-100">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BalanceHeroCard
-          title="יתרה נוכחית"
-          value={todaysBalance}
-          icon={Wallet}
-          accentBgClass="bg-gradient-to-br from-blue-900/40 to-blue-600/10"
-          accentIconClass="text-blue-300"
-          subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
-        />
-        <BalanceHeroCard
+      {/* KPI Row - Projected balance only */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <KPICard
           title="יתרה צפויה"
           value={projectedMonthEndBalance}
           icon={Scale}
-          accentBgClass="bg-gradient-to-br from-amber-900/40 to-amber-500/10"
-          accentIconClass="text-amber-300"
-          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
-        />
-      </div>
-
-      {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KPICard 
-          title="יתרה נוכחית" 
-          value={todaysBalance} 
-          icon={Wallet}
-          accentBgClass="text-blue-300"
-          accentTextClass="text-blue-300"
-          subtitle={`נכון ל-${today.toLocaleDateString('he-IL')}`}
-        />
-        <KPICard 
-          title="יתרה צפויה" 
-          value={projectedMonthEndBalance} 
-          icon={Scale} 
           accentBgClass="text-amber-300"
           accentTextClass="text-amber-300"
-          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })}`}
-        />
-        <KPICard
-          title="הכנסות החודש"
-          value={incomeTotal}
-          icon={TrendingUp}
-          accentBgClass="text-emerald-300"
-          accentTextClass="text-emerald-300"
-          subtitle="רק תנועות שבוצעו"
-        />
-        <KPICard
-          title="הוצאות החודש"
-          value={expenseTotal}
-          icon={TrendingDown}
-          accentBgClass="text-red-300"
-          accentTextClass="text-red-300"
-          subtitle="כולל צפויות"
+          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })} - כולל צפויות`}
         />
       </div>
 
@@ -465,7 +399,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           accentTextClass="text-emerald-300"
           subtitle={
             ytdData.hasData
-              ? `מ-1.1.${today.getFullYear()} עד ${endOfPrevMonth.toLocaleDateString('he-IL')}`
+              ? `נטו (לפני מע"מ) | מ-1.1.${today.getFullYear()} עד ${endOfPrevMonth.toLocaleDateString('he-IL')}`
               : 'אין חודש שנסגר עדיין השנה'
           }
         />
