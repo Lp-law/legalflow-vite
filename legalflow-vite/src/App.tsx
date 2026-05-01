@@ -35,6 +35,8 @@ import HelpCenterModal from './components/HelpCenterModal';
 import FeeSummaryModal from './components/FeeSummaryModal';
 import DepartmentBreakdownModal from './components/DepartmentBreakdownModal';
 import ExpenseSearchModal from './components/ExpenseSearchModal';
+import NextMonthAutoFillModal from './components/NextMonthAutoFillModal';
+import { formatTargetMonthLabel, getDefaultTargetMonth } from './utils/nextMonthAutoFill';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -165,6 +167,8 @@ const App: React.FC = () => {
   const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const [isDepartmentBreakdownOpen, setIsDepartmentBreakdownOpen] = useState(false);
   const [isExpenseSearchOpen, setIsExpenseSearchOpen] = useState(false);
+  const [isAutoFillOpen, setIsAutoFillOpen] = useState(false);
+  const nextMonthLabel = useMemo(() => formatTargetMonthLabel(getDefaultTargetMonth()), []);
   const handleOpenDailyWhatsappSummary = useCallback(() => {
     const summary = buildDailyWhatsappSummary(transactions, initialBalance, new Date());
     setDailyWhatsappSummary(summary);
@@ -867,6 +871,13 @@ useEffect(() => {
             <FileText className="w-5 h-5" />
             חיפוש הוצאות לפי שם
           </button>
+          <button
+            onClick={() => setIsAutoFillOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-violet-300 hover:bg-violet-500/10 border border-violet-500/20"
+          >
+            <Plus className="w-5 h-5" />
+            מלא תזרים {nextMonthLabel}
+          </button>
 
           <div className="text-xs text-slate-400 font-bold px-4 mb-2 mt-6">ניהול משרד</div>
           <button 
@@ -1026,6 +1037,12 @@ useEffect(() => {
         isOpen={isExpenseSearchOpen}
         onClose={() => setIsExpenseSearchOpen(false)}
         transactions={transactions}
+      />
+      <NextMonthAutoFillModal
+        isOpen={isAutoFillOpen}
+        onClose={() => setIsAutoFillOpen(false)}
+        transactions={transactions}
+        onConfirm={(newTransactions) => handleAddTransactionBatch(newTransactions)}
       />
 
       {/* Mobile Bottom Nav */}
