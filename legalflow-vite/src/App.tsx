@@ -30,6 +30,7 @@ import { calculateForecast } from './services/forecastService';
 import { buildDailyWhatsappSummary } from './services/cfoAssistantService';
 import DailyWhatsappSummaryModal from './components/DailyWhatsappSummaryModal';
 import HelpCenterModal from './components/HelpCenterModal';
+import FeeSummaryModal from './components/FeeSummaryModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -157,6 +158,7 @@ const App: React.FC = () => {
   const [isDailyWhatsappModalOpen, setIsDailyWhatsappModalOpen] = useState(false);
   const [dailyWhatsappSummary, setDailyWhatsappSummary] = useState('');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const handleOpenDailyWhatsappSummary = useCallback(() => {
     const summary = buildDailyWhatsappSummary(transactions, initialBalance, new Date());
     setDailyWhatsappSummary(summary);
@@ -786,7 +788,7 @@ useEffect(() => {
         
         <nav className="flex-1 p-4 space-y-2 mt-2 overflow-y-auto">
           <div className="text-xs text-slate-400 font-bold px-4 mb-2 mt-2">תזרים ובקרה</div>
-          <button 
+          <button
             onClick={() => setActiveTab('flow')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
               activeTab === 'flow'
@@ -797,7 +799,14 @@ useEffect(() => {
             <Table2 className="w-5 h-5" />
             תזרים חודשי
           </button>
-          <button 
+          <button
+            onClick={() => setIsFeeSummaryOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-slate-400 hover:bg-white/5"
+          >
+            <FileText className="w-5 h-5" />
+            סיכום שכ"ט לפי לקוח
+          </button>
+          <button
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
               activeTab === 'dashboard'
@@ -952,6 +961,11 @@ useEffect(() => {
         summaryText={dailyWhatsappSummary}
       />
       <HelpCenterModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+      <FeeSummaryModal
+        isOpen={isFeeSummaryOpen}
+        onClose={() => setIsFeeSummaryOpen(false)}
+        transactions={transactions}
+      />
 
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#050b18]/95 border-t border-white/10 p-3 z-30 safe-area-pb backdrop-blur">

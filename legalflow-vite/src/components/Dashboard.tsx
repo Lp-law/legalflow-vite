@@ -11,7 +11,6 @@ import { exportToCSV } from '../services/exportService';
 import { normalize, buildLedgerMapForRange } from '../utils/cashflow';
 import type { CashflowRow } from '../utils/cashflow';
 import { formatDateKey, parseDateKey } from '../utils/date';
-import FeeSummaryModal from './FeeSummaryModal';
 import ChartBuilder from './ChartBuilder';
 
 interface DashboardProps {
@@ -25,7 +24,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   initialBalance,
   forecastResult,
 }) => {
-  const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
   const today = useMemo(() => new Date(), []);
   const todayKey = useMemo(() => formatDateKey(today), [today]);
   const startOfMonth = useMemo(
@@ -376,21 +374,31 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   return (
-    <div className="space-y-6 text-slate-100">
-      {/* KPI Row - Projected balance only */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <KPICard
-          title="יתרה צפויה"
-          value={projectedMonthEndBalance}
-          icon={Scale}
-          accentBgClass="text-amber-300"
-          accentTextClass="text-amber-300"
-          subtitle={`סוף ${endOfMonth.toLocaleDateString('he-IL', { month: 'long', day: 'numeric' })} - כולל צפויות`}
-        />
-      </div>
+    <div className="space-y-8 text-slate-100">
+      {/* Section 1: Projected balance - hero card */}
+      <section>
+        <div className="rounded-2xl shadow-lg border border-amber-500/20 bg-gradient-to-br from-amber-900/30 via-amber-800/10 to-transparent p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-amber-500/20 border border-amber-400/30 text-amber-200">
+              <Scale className="w-7 h-7" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-white">יתרה צפויה לסוף החודש</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {endOfMonth.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' })} · כולל תנועות צפויות
+              </p>
+            </div>
+          </div>
+          <p className={`text-4xl font-bold ${projectedMonthEndBalance >= 0 ? 'text-[var(--law-gold)]' : 'text-rose-300'}`}>
+            ₪{projectedMonthEndBalance.toLocaleString()}
+          </p>
+        </div>
+      </section>
 
-      {/* YTD KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Section 2: YTD performance */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider px-1">מתחילת השנה</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KPICard
           title="הכנסות מתחילת השנה"
           value={ytdData.income}
@@ -440,25 +448,14 @@ const Dashboard: React.FC<DashboardProps> = ({
             </>
           )}
         </div>
-      </div>
-
-      <div className="law-card flex flex-col justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-300 mb-1">ניתוח שכר טרחה</p>
-          <p className="text-base text-slate-300">
-            עקוב אחר תרומת לקוחות מיוחדים לשכר הטרחה בתאריכים נבחרים.
-          </p>
         </div>
-        <button
-          onClick={() => setIsFeeSummaryOpen(true)}
-          className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-slate-900 bg-gradient-to-l from-[#d4af37] to-[#b37a12] rounded-full shadow-lg hover:shadow-xl transition-colors"
-        >
-          סיכום שכר טרחה לפי סוג לקוח
-          <Download className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
-        <KPICard 
+      </section>
+
+      {/* Section 3: Current month breakdown */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider px-1">החודש - פירוט לפי קטגוריה</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
+        <KPICard
           title={'סה"כ שכר טרחה'}
           value={totalsByGroup.fee}
           icon={TrendingUp}
@@ -500,9 +497,13 @@ const Dashboard: React.FC<DashboardProps> = ({
           accentBgClass="text-pink-300"
           accentTextClass="text-pink-300"
         />
-      </div>
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Section 4: Trends and breakdown */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider px-1">תרשימים ומגמות</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Trend Chart */}
         <div className="lg:col-span-2 law-card">
         <div className="flex justify-between items-center mb-6 gap-4">
@@ -616,12 +617,9 @@ const Dashboard: React.FC<DashboardProps> = ({
              )}
           </div>
         </div>
-      </div>
-      <FeeSummaryModal
-        isOpen={isFeeSummaryOpen}
-        onClose={() => setIsFeeSummaryOpen(false)}
-        transactions={transactions}
-      />
+        </div>
+      </section>
+
       <ChartBuilder
         transactions={transactions}
         isOpen={isChartBuilderOpen}
