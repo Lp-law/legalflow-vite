@@ -6,6 +6,7 @@ const STORAGE_KEY_INITIAL_BALANCE = 'legalflow_initial_balance_v2';
 const STORAGE_KEY_CUSTOM_CATEGORIES = 'legalflow_custom_categories_v2';
 const STORAGE_KEY_CLIENTS = 'legalflow_clients_v1';
 const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
+const STORAGE_KEY_MEDICAL_TOKENS = 'legalflow_medical_dept_tokens_v1';
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 
 const emitStorageChange = (key: string) => {
@@ -364,6 +365,49 @@ export const replaceClients = (nextClients: unknown) => {
   const sanitized = sanitizeClientList(nextClients);
   localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(sanitized));
   emitStorageChange('clients');
+};
+
+// --- Department classification (medical negligence vs civil litigation) ---
+// Stores tokens (substrings) the user has explicitly tagged as medical
+// negligence. Matching logic: a transaction belongs to medical negligence
+// if its description contains any hardcoded token OR any user token.
+
+const sanitizeMedicalTokens = (raw: unknown): string[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .map(item => item.trim());
+};
+
+export const getUserMedicalTokens = (): string[] => {
+  const stored = localStorage.getItem(STORAGE_KEY_MEDICAL_TOKENS);
+  if (!stored) return [];
+  try {
+    return sanitizeMedicalTokens(JSON.parse(stored));
+  } catch {
+    return [];
+  }
+};
+
+export const addUserMedicalToken = (token: string): string[] => {
+  const trimmed = token.trim();
+  if (!trimmed) return getUserMedicalTokens();
+  const current = getUserMedicalTokens();
+  if (current.includes(trimmed)) return current;
+  const updated = [...current, trimmed];
+  localStorage.setItem(STORAGE_KEY_MEDICAL_TOKENS, JSON.stringify(updated));
+  emitStorageChange('medical_tokens');
+  return updated;
+};
+
+export const removeUserMedicalToken = (token: string): string[] => {
+  const trimmed = token.trim();
+  const current = getUserMedicalTokens();
+  const updated = current.filter(t => t !== trimmed);
+  if (updated.length === current.length) return current;
+  localStorage.setItem(STORAGE_KEY_MEDICAL_TOKENS, JSON.stringify(updated));
+  emitStorageChange('medical_tokens');
+  return updated;
 };
 
 // --- Backup Logic ---

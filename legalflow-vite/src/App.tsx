@@ -31,6 +31,7 @@ import { buildDailyWhatsappSummary } from './services/cfoAssistantService';
 import DailyWhatsappSummaryModal from './components/DailyWhatsappSummaryModal';
 import HelpCenterModal from './components/HelpCenterModal';
 import FeeSummaryModal from './components/FeeSummaryModal';
+import DepartmentBreakdownModal from './components/DepartmentBreakdownModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -159,6 +160,7 @@ const App: React.FC = () => {
   const [dailyWhatsappSummary, setDailyWhatsappSummary] = useState('');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isFeeSummaryOpen, setIsFeeSummaryOpen] = useState(false);
+  const [isDepartmentBreakdownOpen, setIsDepartmentBreakdownOpen] = useState(false);
   const handleOpenDailyWhatsappSummary = useCallback(() => {
     const summary = buildDailyWhatsappSummary(transactions, initialBalance, new Date());
     setDailyWhatsappSummary(summary);
@@ -836,6 +838,13 @@ useEffect(() => {
             <LayoutDashboard className="w-5 h-5" />
             לוח בקרה
           </button>
+          <button
+            onClick={() => setIsDepartmentBreakdownOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-slate-400 hover:bg-white/5"
+          >
+            <FileText className="w-5 h-5" />
+            פילוח לפי מחלקה
+          </button>
 
           <div className="text-xs text-slate-400 font-bold px-4 mb-2 mt-6">ניהול משרד</div>
           <button 
@@ -984,6 +993,11 @@ useEffect(() => {
       <FeeSummaryModal
         isOpen={isFeeSummaryOpen}
         onClose={() => setIsFeeSummaryOpen(false)}
+        transactions={transactions}
+      />
+      <DepartmentBreakdownModal
+        isOpen={isDepartmentBreakdownOpen}
+        onClose={() => setIsDepartmentBreakdownOpen(false)}
         transactions={transactions}
       />
 
