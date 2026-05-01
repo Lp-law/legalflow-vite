@@ -17,7 +17,9 @@ import {
   getLoanOverrides,
   replaceLoanOverrides,
   isLoanCategoryLabel,
+  setTransactionDeptOverride,
 } from './services/storageService';
+import type { TxDeptOverride } from './services/storageService';
 import { generateExecutiveSummary } from './services/reportService';
 import { syncTaxTransactions } from './services/taxService';
 import TransactionForm from './components/TransactionForm';
@@ -282,7 +284,10 @@ const App: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [recentTransactionIds]);
 
-  const handleAddTransactionBatch = (newTransactions: Omit<Transaction, 'id'>[]) => {
+  const handleAddTransactionBatch = (
+    newTransactions: Omit<Transaction, 'id'>[],
+    departmentChoice?: TxDeptOverride,
+  ) => {
     const processedTransactions = newTransactions.map(t => {
       const id = crypto.randomUUID();
       let amount = t.amount;
@@ -297,6 +302,14 @@ const App: React.FC = () => {
         id,
       };
     });
+
+    if (departmentChoice) {
+      processedTransactions.forEach(tx => {
+        if (tx.group === 'fee') {
+          setTransactionDeptOverride(tx.id, departmentChoice);
+        }
+      });
+    }
 
     const updatedList = [...transactions, ...processedTransactions];
     updateTransactionsWithSync(updatedList);

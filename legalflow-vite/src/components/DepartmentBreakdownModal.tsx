@@ -6,8 +6,12 @@ import {
   getUserMedicalTokens,
   addUserMedicalToken,
   removeUserMedicalToken,
+  getTransactionDeptOverrides,
+  setTransactionDeptOverride,
+  removeTransactionDeptOverride,
   STORAGE_EVENT,
 } from '../services/storageService';
+import type { TxDeptOverride } from '../services/storageService';
 
 // Hardcoded medical-negligence client tokens. Any fee transaction whose
 // description contains any of these (case-insensitive, ignoring punctuation
@@ -62,9 +66,13 @@ const DepartmentBreakdownModal: React.FC<DepartmentBreakdownModalProps> = ({
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
   const [userTokens, setUserTokens] = useState<string[]>(() => getUserMedicalTokens());
+  const [txOverrides, setTxOverrides] = useState<Record<string, TxDeptOverride>>(() => getTransactionDeptOverrides());
 
   useEffect(() => {
-    const handler = () => setUserTokens(getUserMedicalTokens());
+    const handler = () => {
+      setUserTokens(getUserMedicalTokens());
+      setTxOverrides(getTransactionDeptOverrides());
+    };
     window.addEventListener(STORAGE_EVENT, handler);
     return () => window.removeEventListener(STORAGE_EVENT, handler);
   }, []);
@@ -79,11 +87,17 @@ const DepartmentBreakdownModal: React.FC<DepartmentBreakdownModalProps> = ({
     [userTokens]
   );
 
-  const classify = (description: string | undefined, clientReference?: string): Department => {
+  const classifyByTokens = (description: string | undefined, clientReference?: string): Department => {
     const haystack = `${normalize(description)} ${normalize(clientReference)}`;
     return allMedicalTokensNormalized.some(token => haystack.includes(token))
       ? 'medical'
       : 'civil';
+  };
+
+  const classify = (transaction: Transaction): Department => {
+    const override = txOverrides[transaction.id];
+    if (override) return override;
+    return classifyByTokens(transaction.description, transaction.clientReference);
   };
 
   const wasClassifiedByUserToken = (description: string | undefined, clientReference?: string): boolean => {
@@ -108,7 +122,7 @@ const DepartmentBreakdownModal: React.FC<DepartmentBreakdownModalProps> = ({
       .forEach(transaction => {
         const date = parseDateKey(transaction.date);
         if (date.getTime() < start.getTime() || date.getTime() > end.getTime()) return;
-        const dept = classify(transaction.description, transaction.clientReference);
+        const dept = classify(transaction);
         if (dept === 'medical') medical.push(transaction);
         else civil.push(transaction);
       });
@@ -132,7 +146,7 @@ const DepartmentBreakdownModal: React.FC<DepartmentBreakdownModalProps> = ({
       },
       totalGross: medicalGross + civilGross,
     };
-  }, [transactions, startDate, endDate, allMedicalTokensNormalized]);
+  }, [transactions, startDate, endDate, allMedicalTokensNormalized, txOverrides]);
 
   if (!isOpen) return null;
 
@@ -146,6 +160,16 @@ const DepartmentBreakdownModal: React.FC<DepartmentBreakdownModalProps> = ({
     if (!description || !description.trim()) return;
     removeUserMedicalToken(description.trim());
     setUserTokens(getUserMedicalTokens());
+  };
+
+  const handleSetOverride = (transactionId: string, dept: TxDeptOverride) => {
+    setTransactionDeptOverride(transactionId, dept);
+    setTxOverrides(getTransactionDeptOverrides());
+  };
+
+  const handleClearOverride = (transactionId: string) => {
+    removeTransactionDeptOverride(transactionId);
+    setTxOverrides(getTransactionDeptOverrides());
   };
 
   const renderCurrency = (value: number) =>
@@ -264,26 +288,48 @@ const DepartmentBreakdownModal: React.FC<DepartmentBreakdownModalProps> = ({
                   <tbody className="divide-y divide-slate-100">
                     {summary.medical.transactions.map(t => {
                       const isUserToken = wasClassifiedByUserToken(t.description, t.clientReference);
+                      const hasOverride = txOverrides[t.id] === 'medical';
                       return (
                         <tr key={t.id} className="hover:bg-slate-50">
                           <td className="px-4 py-2 text-slate-600">
                             {parseDateKey(t.date).toLocaleDateString('he-IL')}
                           </td>
-                          <td className="px-4 py-2 text-slate-700 font-medium">{t.description || 'ללא תיאור'}</td>
+                          <td className="px-4 py-2 text-slate-700 font-medium">
+                            {t.description || 'ללא תיאור'}
+                            {hasOverride && (
+                              <span className="mr-2 inline-block text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">חד-פעמי</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 font-bold text-emerald-700">{renderCurrency(t.amount)}</td>
-                          <td className="px-4 py-2">
-                            {isUserToken ? (
+                          <td className="px-4 py-2 space-y-1 flex flex-col items-start">
+                            <button
+                              type="button"
+                              onClick={() => handleSetOverride(t.id, 'civil')}
+                              className="text-xs font-semibold text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
+                              title="העבר רק את התנועה הזו לליטיגציה (לא משפיע על תנועות אחרות)"
+                            >
+                              <ArrowRight className="w-3 h-3" />
+                              סווג חד-פעמי כליטיגציה
+                            </button>
+                            {hasOverride && (
+                              <button
+                                type="button"
+                                onClick={() => handleClearOverride(t.id)}
+                                className="text-[10px] text-slate-500 hover:text-slate-800"
+                                title="בטל את הסיווג החד-פעמי וחזור לסיווג אוטומטי"
+                              >
+                                בטל סיווג חד-פעמי
+                              </button>
+                            )}
+                            {isUserToken && !hasOverride && (
                               <button
                                 type="button"
                                 onClick={() => handleDemoteToCivil(t.description)}
-                                className="text-xs font-semibold text-slate-500 hover:text-slate-800 inline-flex items-center gap-1"
-                                title="הסר את התיאור הזה מרשימת רשלנות רפואית"
+                                className="text-[10px] text-slate-500 hover:text-slate-800"
+                                title="הסר את התיאור הזה מרשימת רשלנות רפואית (משפיע על כל התנועות עם אותו תיאור)"
                               >
-                                <ArrowRight className="w-3 h-3" />
-                                החזר לליטיגציה
+                                הסר מקבועים
                               </button>
-                            ) : (
-                              <span className="text-[10px] text-slate-400">קבוע</span>
                             )}
                           </td>
                         </tr>
@@ -315,26 +361,54 @@ const DepartmentBreakdownModal: React.FC<DepartmentBreakdownModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {summary.civil.transactions.map(t => (
-                      <tr key={t.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-2 text-slate-600">
-                          {parseDateKey(t.date).toLocaleDateString('he-IL')}
-                        </td>
-                        <td className="px-4 py-2 text-slate-700 font-medium">{t.description || 'ללא תיאור'}</td>
-                        <td className="px-4 py-2 font-bold text-blue-700">{renderCurrency(t.amount)}</td>
-                        <td className="px-4 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handlePromoteToMedical(t.description)}
-                            className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1"
-                            title="העבר את התיאור הזה למחלקת רשלנות רפואית (תקף גם לתנועות עתידיות עם אותו תיאור)"
-                          >
-                            <Stethoscope className="w-3 h-3" />
-                            העבר לרשלנות רפואית
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {summary.civil.transactions.map(t => {
+                      const hasOverride = txOverrides[t.id] === 'civil';
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-2 text-slate-600">
+                            {parseDateKey(t.date).toLocaleDateString('he-IL')}
+                          </td>
+                          <td className="px-4 py-2 text-slate-700 font-medium">
+                            {t.description || 'ללא תיאור'}
+                            {hasOverride && (
+                              <span className="mr-2 inline-block text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">חד-פעמי</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 font-bold text-blue-700">{renderCurrency(t.amount)}</td>
+                          <td className="px-4 py-2 space-y-1 flex flex-col items-start">
+                            <button
+                              type="button"
+                              onClick={() => handleSetOverride(t.id, 'medical')}
+                              className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1"
+                              title="העבר רק את התנועה הזו לרשלנות רפואית (לא משפיע על תנועות אחרות)"
+                            >
+                              <Stethoscope className="w-3 h-3" />
+                              סווג חד-פעמי כרשלנות
+                            </button>
+                            {hasOverride && (
+                              <button
+                                type="button"
+                                onClick={() => handleClearOverride(t.id)}
+                                className="text-[10px] text-slate-500 hover:text-slate-800"
+                                title="בטל את הסיווג החד-פעמי וחזור לסיווג אוטומטי"
+                              >
+                                בטל סיווג חד-פעמי
+                              </button>
+                            )}
+                            {!hasOverride && (
+                              <button
+                                type="button"
+                                onClick={() => handlePromoteToMedical(t.description)}
+                                className="text-[10px] text-slate-500 hover:text-emerald-700"
+                                title="הוסף את התיאור הזה לרשימת רשלנות רפואית (משפיע על כל התנועות עם אותו תיאור)"
+                              >
+                                הוסף לקבועים
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

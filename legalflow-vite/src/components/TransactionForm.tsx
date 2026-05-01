@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Repeat } from 'lucide-react';
+import { X, Repeat, Stethoscope, Scale } from 'lucide-react';
 import { PAYMENT_METHODS } from '../constants';
 import { getAllCategories, saveCustomCategory, getClients, saveClient } from '../services/storageService';
+import type { TxDeptOverride } from '../services/storageService';
 import type { Transaction, TransactionGroup } from '../types';
 import { formatDateKey } from '../utils/date';
 import { suggestCategoryForTransaction, type CategorySuggestion } from '../services/insightService';
 import { lightInputBaseClasses, lightInputCompactClasses } from './ui/inputStyles';
+
+const DEPT_SELECTOR_MIN_DATE = '2026-05-01';
 
 const FEE_CATEGORY_NAME = 'שכר טרחה';
 
@@ -17,7 +20,7 @@ type PaymentMethod = Transaction['paymentMethod'];
 interface TransactionFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (transactions: Omit<Transaction, 'id'>[]) => void;
+  onSubmit: (transactions: Omit<Transaction, 'id'>[], departmentChoice?: TxDeptOverride) => void;
   onSubmitEdit?: (transaction: Transaction) => void;
   initialDate?: string;
   initialType?: 'income' | 'expense';
@@ -87,6 +90,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [recurringMonths, setRecurringMonths] = useState(12);
   const [loanEndMonth, setLoanEndMonth] = useState('');
   const [categorySuggestion, setCategorySuggestion] = useState<CategorySuggestion | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<TxDeptOverride | null>(null);
 
   // Flag to track manual override for tax calc. 
   // Generally user added transactions are "Manual" by definition relative to the auto-tax generator,
@@ -160,6 +164,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setNewCategoryName('');
     setIsAddingClient(false);
     setNewClientName('');
+    setSelectedDepartment(null);
   }, [isOpen, initialDate, initialType, initialGroup, transactionToEdit]);
 
   useEffect(() => {
@@ -270,6 +275,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
+    const requiresDepartmentChoice =
+      !isEditing && group === 'fee' && type === 'income' && date >= DEPT_SELECTOR_MIN_DATE;
+    if (requiresDepartmentChoice && !selectedDepartment) {
+      alert('יש לבחור מחלקה לשכר טרחה (רשלנות רפואית או ליטיגציה אזרחית מסחרית).');
+      return;
+    }
+
     const absoluteAmount = Math.abs(parsedAmount);
     const effectiveAmount = group === 'bank_adjustment' ? parsedAmount : absoluteAmount;
 
@@ -327,7 +339,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       });
     }
 
-    onSubmit(transactionsToCreate);
+    onSubmit(transactionsToCreate, selectedDepartment ?? undefined);
     onClose();
   };
 
@@ -627,6 +639,40 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
       </div>
     )}
+
+            {!isEditing && group === 'fee' && type === 'income' && date >= DEPT_SELECTOR_MIN_DATE && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                <label className="block text-sm font-semibold text-slate-700">
+                  מחלקה (חובה לשכ"ט מ-מאי 2026 ואילך) <span className="text-rose-600">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDepartment('medical')}
+                    className={`py-2 px-3 rounded-lg text-sm font-medium border transition-all flex items-center justify-center gap-2 ${
+                      selectedDepartment === 'medical'
+                        ? 'bg-emerald-600 text-white border-emerald-700'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-400'
+                    }`}
+                  >
+                    <Stethoscope className="w-4 h-4" />
+                    רשלנות רפואית
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDepartment('civil')}
+                    className={`py-2 px-3 rounded-lg text-sm font-medium border transition-all flex items-center justify-center gap-2 ${
+                      selectedDepartment === 'civil'
+                        ? 'bg-blue-600 text-white border-blue-700'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-blue-400'
+                    }`}
+                  >
+                    <Scale className="w-4 h-4" />
+                    ליטיגציה אזרחית מסחרית
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>

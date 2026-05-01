@@ -7,6 +7,7 @@ const STORAGE_KEY_CUSTOM_CATEGORIES = 'legalflow_custom_categories_v2';
 const STORAGE_KEY_CLIENTS = 'legalflow_clients_v1';
 const STORAGE_KEY_LOAN_OVERRIDES = 'legalflow_loan_overrides_v1';
 const STORAGE_KEY_MEDICAL_TOKENS = 'legalflow_medical_dept_tokens_v1';
+const STORAGE_KEY_TX_DEPT_OVERRIDES = 'legalflow_tx_dept_overrides_v1';
 export const STORAGE_EVENT = 'legalflow:storage-changed';
 
 const emitStorageChange = (key: string) => {
@@ -408,6 +409,56 @@ export const removeUserMedicalToken = (token: string): string[] => {
   localStorage.setItem(STORAGE_KEY_MEDICAL_TOKENS, JSON.stringify(updated));
   emitStorageChange('medical_tokens');
   return updated;
+};
+
+// Per-transaction one-off department overrides (by transaction id).
+// Takes priority over both hardcoded tokens and user tokens.
+export type TxDeptOverride = 'medical' | 'civil';
+
+const sanitizeTxDeptOverrides = (raw: unknown): Record<string, TxDeptOverride> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const result: Record<string, TxDeptOverride> = {};
+  for (const [id, value] of Object.entries(raw)) {
+    if (typeof id !== 'string' || !id.trim()) continue;
+    if (value === 'medical' || value === 'civil') {
+      result[id] = value;
+    }
+  }
+  return result;
+};
+
+export const getTransactionDeptOverrides = (): Record<string, TxDeptOverride> => {
+  const stored = localStorage.getItem(STORAGE_KEY_TX_DEPT_OVERRIDES);
+  if (!stored) return {};
+  try {
+    return sanitizeTxDeptOverrides(JSON.parse(stored));
+  } catch {
+    return {};
+  }
+};
+
+export const setTransactionDeptOverride = (
+  transactionId: string,
+  department: TxDeptOverride
+): Record<string, TxDeptOverride> => {
+  if (!transactionId) return getTransactionDeptOverrides();
+  const current = getTransactionDeptOverrides();
+  if (current[transactionId] === department) return current;
+  const updated = { ...current, [transactionId]: department };
+  localStorage.setItem(STORAGE_KEY_TX_DEPT_OVERRIDES, JSON.stringify(updated));
+  emitStorageChange('tx_dept_overrides');
+  return updated;
+};
+
+export const removeTransactionDeptOverride = (
+  transactionId: string
+): Record<string, TxDeptOverride> => {
+  const current = getTransactionDeptOverrides();
+  if (!(transactionId in current)) return current;
+  const { [transactionId]: _removed, ...rest } = current;
+  localStorage.setItem(STORAGE_KEY_TX_DEPT_OVERRIDES, JSON.stringify(rest));
+  emitStorageChange('tx_dept_overrides');
+  return rest;
 };
 
 // --- Backup Logic ---
