@@ -737,9 +737,19 @@ const MonthlyFlow: React.FC<MonthlyFlowProps> = ({
                                         </span>
                                       )}
                                     </div>
-                                    <span className="text-[10px] text-emerald-700 border-t border-emerald-300 pt-1 mt-1">
-                                        נטו (82%): {formatCurrency(monthSummary.fee * 0.82)}
-                                    </span>
+                                    <div className="text-[10px] flex flex-col gap-0.5 border-t border-emerald-300 pt-1 mt-1">
+                                      <span className="text-emerald-700">
+                                        מע"מ שולם: {formatCurrency(monthSummary.fee * 0.18)}
+                                      </span>
+                                      {monthSummary.feePending > 0 && (
+                                        <span className="text-amber-700">
+                                          מע"מ צפוי: {formatCurrency(monthSummary.feePending * 0.18)}
+                                        </span>
+                                      )}
+                                      <span className="text-emerald-700">
+                                        נטו לפני מע"מ (שולם): {formatCurrency(monthSummary.fee / 1.18)}
+                                      </span>
+                                    </div>
                                 </div>
                             </td>
                             

@@ -46,12 +46,13 @@ export const syncTaxTransactions = (transactions: Transaction[]): Transaction[] 
         const nextYear = nextMonthDate.getFullYear();
         const nextMonth = nextMonthDate.getMonth(); // 0-11
 
-        // Calculate Amounts (totalFee = הכנסות שכר טרחה לפני מע"מ)
+        // totalFee = סך תקבולי שכר טרחה כפי שהוזנו (כולל מע"מ)
+        // מע"מ נחזה ב-18% מהסכום הכולל (כפי שהלקוח רוצה לראות בתזרים)
         const vatAmount = totalFee * 0.18;
-        // מקדמות מס הכנסה: 14% מתשלומי מאי 2026 ואילך (= הכנסות אפריל 2026 ואילך), לפני כן 8.33%
-        const paymentMonthKey = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}`;
-        const taxRate = paymentMonthKey >= '2026-05' ? 0.14 : 0.0833;
-        const taxAmount = totalFee * taxRate;
+        // מקדמות מס הכנסה: 14% על הנטו (totalFee / 1.18)
+        // (חודשים קודמים מולאו ידנית בנתוני אמת ומוגנים ע"י isManualOverride)
+        const netIncome = totalFee / 1.18;
+        const taxAmount = netIncome * 0.14;
 
         // Define Dates
         // VAT: 25th
