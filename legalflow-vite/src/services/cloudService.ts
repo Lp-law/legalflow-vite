@@ -1,7 +1,5 @@
 import type { Transaction, Category } from '../types';
 
-const API_BASE_URL = (import.meta.env.VITE_LEGALFLOW_API_URL || '').replace(/\/$/, '');
-
 export class UnauthorizedError extends Error {
   constructor(message = 'Invalid credentials') {
     super(message);
@@ -9,12 +7,14 @@ export class UnauthorizedError extends Error {
   }
 }
 
+// Read env lazily so tests can stub VITE_LEGALFLOW_API_URL via vi.stubEnv
+// after this module has been imported.
 const ensureApiBaseUrl = () => {
-  if (!API_BASE_URL) {
+  const url = (import.meta.env.VITE_LEGALFLOW_API_URL || '').replace(/\/$/, '');
+  if (!url) {
     throw new Error('חסר משתנה סביבה VITE_LEGALFLOW_API_URL');
   }
-
-  return API_BASE_URL;
+  return url;
 };
 
 const parseResponse = async <T>(response: Response): Promise<T> => {
@@ -115,4 +115,61 @@ export const persistCloudSnapshot = async (token: string, payload: CloudSnapshot
     body: JSON.stringify(payload),
   });
 };
+
+// Versioned cloud backups. Distinct from CloudSnapshot above (which is the
+// live "current" state). A BackupSnapshot is a frozen copy from a point in
+// time that can be listed and restored.
+export type BackupSource = 'manual' | 'auto' | 'pre-restore';
+
+export interface BackupSnapshotMeta {
+  id: string;
+  createdAt: string;
+  label: string | null;
+  transactionCount: number;
+}
+
+export interface CreateBackupResponse {
+  id: string;
+  createdAt: string;
+  label: string | null;
+  source: BackupSource;
+  transactionCount: number;
+  trimmedCount: number;
+}
+
+export interface RestoreBackupResponse {
+  ok: true;
+  restoredFrom: string;
+  safetySnapshotId: string;
+  transactionCount: number;
+}
+
+export const listBackups = (token: string) =>
+  authorizedRequest<{ snapshots: BackupSnapshotMeta[] }>('/api/v1/snapshots', token).then(
+    (r) => r.snapshots
+  );
+
+export const createBackup = (
+  token: string,
+  options: { label?: string | null; source?: BackupSource } = {}
+) =>
+  authorizedRequest<CreateBackupResponse>('/api/v1/snapshots', token, {
+    method: 'POST',
+    body: JSON.stringify({
+      label: options.label || null,
+      source: options.source || 'manual',
+    }),
+  });
+
+export const restoreBackup = (token: string, id: string) =>
+  authorizedRequest<RestoreBackupResponse>(
+    `/api/v1/snapshots/${encodeURIComponent(id)}/restore`,
+    token,
+    { method: 'POST' }
+  );
+
+export const deleteBackup = (token: string, id: string) =>
+  authorizedRequest<{ ok: true }>(`/api/v1/snapshots/${encodeURIComponent(id)}`, token, {
+    method: 'DELETE',
+  });
 

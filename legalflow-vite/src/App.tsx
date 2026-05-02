@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Plus, LayoutDashboard, Table2, LogOut, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, HelpCircle, Cloud } from 'lucide-react';
 import type { Transaction, TransactionGroup } from './types';
 import {
   getTransactions,
@@ -28,7 +28,8 @@ import { syncTaxTransactions } from './services/taxService';
 import TransactionForm from './components/TransactionForm';
 import Logo from './components/Logo';
 import Login from './components/Login';
-import { fetchCloudSnapshot, persistCloudSnapshot, UnauthorizedError } from './services/cloudService';
+import { fetchCloudSnapshot, persistCloudSnapshot, createBackup, UnauthorizedError } from './services/cloudService';
+import CloudBackupModal from './components/CloudBackupModal';
 import { formatDateKey, parseDateKey } from './utils/date';
 import SystemToolsToolbar from './components/SystemToolsToolbar';
 import { calculateForecast } from './services/forecastService';
@@ -48,6 +49,8 @@ const ExecutiveSummary = lazy(() => import('./components/ExecutiveSummary'));
 
 const CASHFLOW_CUTOFF = parseDateKey('2025-11-01');
 const BACKUP_SESSION_KEY = 'legalflow_backup_done_for_session';
+const CLOUD_AUTO_BACKUP_KEY = 'legalflow_last_cloud_auto_backup';
+const CLOUD_AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const normalizeTransactionDates = (list: Transaction[]) => {
   let didNormalize = false;
@@ -182,6 +185,8 @@ const App: React.FC = () => {
   const [isExpenseSearchOpen, setIsExpenseSearchOpen] = useState(false);
   const [isAutoFillOpen, setIsAutoFillOpen] = useState(false);
   const [isForecastOpen, setIsForecastOpen] = useState(false);
+  const [isCloudBackupOpen, setIsCloudBackupOpen] = useState(false);
+  const autoBackupCheckedRef = useRef(false);
   const nextMonthLabel = useMemo(() => formatTargetMonthLabel(getDefaultTargetMonth()), []);
   const handleOpenDailyWhatsappSummary = useCallback(() => {
     const summary = buildDailyWhatsappSummary(transactions, initialBalance, new Date());
@@ -208,6 +213,8 @@ const App: React.FC = () => {
     setSyncStatus('idle');
     setLastSyncIso(null);
     setSyncError(null);
+    setIsCloudBackupOpen(false);
+    autoBackupCheckedRef.current = false;
   }, []);
 
   const requestBootstrapReload = useCallback(() => {
@@ -611,6 +618,51 @@ const App: React.FC = () => {
     performCloudSync();
   }, [performCloudSync, syncStatus]);
 
+  const handleCloudBackupUnauthorized = useCallback(() => {
+    setIsCloudBackupOpen(false);
+    setAuthError('החיבור לשרת פג תוקף. התחבר מחדש כדי להמשיך לסנכרן.');
+    clearSession();
+  }, [clearSession]);
+
+  const handleAfterRestore = useCallback(() => {
+    setIsCloudBackupOpen(false);
+    requestBootstrapReload();
+  }, [requestBootstrapReload]);
+
+  // Auto-snapshot once per 24h after the cloud bootstrap finishes.
+  // Skips while bootstrapping, while sync is in error state, or if there
+  // is already a queued attempt this session - the ref makes it idempotent
+  // across re-renders so we never fire twice for the same login.
+  useEffect(() => {
+    if (!currentUser || !authToken) return;
+    if (isBootstrapping) return;
+    if (autoBackupCheckedRef.current) return;
+    autoBackupCheckedRef.current = true;
+
+    const last = localStorage.getItem(CLOUD_AUTO_BACKUP_KEY);
+    const lastMs = last ? Number(last) : 0;
+    const now = Date.now();
+    if (Number.isFinite(lastMs) && now - lastMs < CLOUD_AUTO_BACKUP_INTERVAL_MS) {
+      return;
+    }
+
+    (async () => {
+      try {
+        await createBackup(authToken, { source: 'auto', label: null });
+        localStorage.setItem(CLOUD_AUTO_BACKUP_KEY, String(now));
+      } catch (error) {
+        if (error instanceof UnauthorizedError) {
+          clearSession();
+          setAuthError('החיבור לשרת פג תוקף. התחבר מחדש כדי להמשיך לסנכרן.');
+          return;
+        }
+        // Don't surface this to the user - it's a background safety net.
+        // The user can still trigger a manual snapshot from the UI.
+        console.warn('Auto cloud backup failed', error);
+      }
+    })();
+  }, [currentUser, authToken, isBootstrapping, clearSession]);
+
   useEffect(() => {
     if (!currentUser || !authToken || isRestoringFromCloud.current) return;
     performCloudSync();
@@ -938,7 +990,7 @@ useEffect(() => {
           </button>
 
           <div className="text-xs text-slate-400 font-bold px-4 mb-2 mt-6">ניהול משרד</div>
-          <button 
+          <button
             onClick={() => setActiveTab('summary')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
               activeTab === 'summary'
@@ -948,6 +1000,13 @@ useEffect(() => {
           >
             <FileText className="w-5 h-5" />
             תקציר מנהלים
+          </button>
+          <button
+            onClick={() => setIsCloudBackupOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/20"
+          >
+            <Cloud className="w-5 h-5" />
+            גיבויים בענן
           </button>
         </nav>
 
@@ -1107,6 +1166,13 @@ useEffect(() => {
         onClose={() => setIsForecastOpen(false)}
         transactions={transactions}
       />
+      <CloudBackupModal
+        isOpen={isCloudBackupOpen}
+        onClose={() => setIsCloudBackupOpen(false)}
+        authToken={authToken}
+        onRestored={handleAfterRestore}
+        onUnauthorized={handleCloudBackupUnauthorized}
+      />
 
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#050b18]/95 border-t border-white/10 p-3 z-30 safe-area-pb backdrop-blur">
@@ -1185,6 +1251,15 @@ useEffect(() => {
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 עדכון יתרת פתיחה
+              </button>
+              <button
+                onClick={() => {
+                  setIsMobileActionsOpen(false);
+                  setIsCloudBackupOpen(true);
+                }}
+                className="w-full px-4 py-3 rounded-xl border border-emerald-200 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+              >
+                גיבויים בענן
               </button>
               <button
                 onClick={() => {
