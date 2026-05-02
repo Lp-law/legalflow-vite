@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback, useMemo } from 'react';
-import { Plus, LayoutDashboard, Table2, LogOut, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, HelpCircle, Cloud } from 'lucide-react';
+import { Plus, LayoutDashboard, Table2, LogOut, FileText, ShieldCheck, ArrowRight, Menu, AlertTriangle, HelpCircle, Cloud, Calculator } from 'lucide-react';
 import type { Transaction, TransactionGroup } from './types';
 import {
   getTransactions,
@@ -42,6 +42,7 @@ import ExpenseSearchModal from './components/ExpenseSearchModal';
 import NextMonthAutoFillModal from './components/NextMonthAutoFillModal';
 import { formatTargetMonthLabel, getDefaultTargetMonth } from './utils/nextMonthAutoFill';
 import ForecastModal from './components/ForecastModal';
+import TaxForecastModal from './components/TaxForecastModal';
 
 const MonthlyFlow = lazy(() => import('./components/MonthlyFlow'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -185,6 +186,7 @@ const App: React.FC = () => {
   const [isExpenseSearchOpen, setIsExpenseSearchOpen] = useState(false);
   const [isAutoFillOpen, setIsAutoFillOpen] = useState(false);
   const [isForecastOpen, setIsForecastOpen] = useState(false);
+  const [isTaxForecastOpen, setIsTaxForecastOpen] = useState(false);
   const [isCloudBackupOpen, setIsCloudBackupOpen] = useState(false);
   const autoBackupCheckedRef = useRef(false);
   const nextMonthLabel = useMemo(() => formatTargetMonthLabel(getDefaultTargetMonth()), []);
@@ -961,6 +963,13 @@ useEffect(() => {
             לוח בקרה
           </button>
           <button
+            onClick={() => setIsTaxForecastOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-amber-300 hover:bg-amber-500/10 border border-amber-500/20"
+          >
+            <Calculator className="w-5 h-5" />
+            תחזית מס
+          </button>
+          <button
             onClick={() => setIsForecastOpen(true)}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all text-slate-400 hover:bg-white/5"
           >
@@ -1164,6 +1173,11 @@ useEffect(() => {
       <ForecastModal
         isOpen={isForecastOpen}
         onClose={() => setIsForecastOpen(false)}
+        transactions={transactions}
+      />
+      <TaxForecastModal
+        isOpen={isTaxForecastOpen}
+        onClose={() => setIsTaxForecastOpen(false)}
         transactions={transactions}
       />
       <CloudBackupModal
