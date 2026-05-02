@@ -5,6 +5,7 @@ import {
   calculateTaxForecast,
   MIN_CREDIT_POINTS,
   CREDIT_POINT_MONTHLY_VALUE,
+  INCOME_TAX_ADVANCE_RATE,
 } from '../services/taxForecastService';
 
 interface TaxForecastModalProps {
@@ -89,27 +90,31 @@ const TaxForecastModal: React.FC<TaxForecastModalProps> = ({ isOpen, onClose, tr
   };
 
   // Decide the dominant action message.
-  const delta = result.monthlyAdvanceDelta;
+  const adjustment = result.monthlyAdvanceAdjustment;
   const balance = result.balanceVsAdvances;
+  const monthsLeft = result.monthsRemainingForAdvance;
   const recommendation = (() => {
-    if (Math.abs(delta) < 200) {
+    if (monthsLeft === 0 || Math.abs(adjustment) < 200) {
       return {
         tone: 'neutral' as const,
-        title: 'המקדמה החודשית תקינה',
-        body: 'לפי התחזית הנוכחית המקדמה שלך מספיקה. תמשיך לעקוב מדי חודש.',
+        title: monthsLeft === 0 ? 'השנה כבר נסגרה' : 'המקדמה החודשית תקינה',
+        body:
+          monthsLeft === 0
+            ? `יתרת המס לסוף השנה: ${renderCurrency(Math.abs(balance))} ${balance > 0 ? 'לתשלום' : 'החזר'}.`
+            : 'לפי התחזית הנוכחית המקדמה שלך מספיקה. תמשיך לעקוב מדי חודש.',
       };
     }
-    if (delta > 0) {
+    if (adjustment > 0) {
       return {
         tone: 'warn' as const,
-        title: `מומלץ להגדיל את מקדמת מס הכנסה ב-${renderCurrency(delta)}/חודש`,
-        body: `אם תמשיך עם המקדמה הנוכחית (${renderCurrency(result.currentMonthlyAdvance)}/חודש), תיווצר יתרת מס לתשלום של כ-${renderCurrency(balance)} בסוף השנה. כדי לאזן: ${renderCurrency(result.recommendedMonthlyAdvance)}/חודש.`,
+        title: `מומלץ להגדיל את המקדמה החודשית ב-${renderCurrency(adjustment)}/חודש למשך ${monthsLeft} חודשים שנותרו`,
+        body: `ללא הגדלה תיווצר יתרת מס לתשלום של ${renderCurrency(balance)} בסוף השנה. הגדלה זו תאזן את היתרה.`,
       };
     }
     return {
       tone: 'good' as const,
-      title: `אפשר להפחית את מקדמת מס הכנסה ב-${renderCurrency(Math.abs(delta))}/חודש`,
-      body: `המקדמה הנוכחית גבוהה מהנדרש. צפי החזר מס: ${renderCurrency(Math.abs(balance))}. כדי לאזן: ${renderCurrency(result.recommendedMonthlyAdvance)}/חודש.`,
+      title: `אפשר להפחית את המקדמה החודשית ב-${renderCurrency(Math.abs(adjustment))}/חודש למשך ${monthsLeft} חודשים שנותרו`,
+      body: `המקדמות עד כה + הצפויות גבוהות מהנדרש. צפי החזר מס: ${renderCurrency(Math.abs(balance))}.`,
     };
   })();
 
@@ -167,15 +172,20 @@ const TaxForecastModal: React.FC<TaxForecastModalProps> = ({ isOpen, onClose, tr
                 <div className="text-sm opacity-90">{recommendation.body}</div>
                 <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-current/20">
                   <div>
-                    <div className="text-xs opacity-70">מקדמה חודשית נוכחית</div>
+                    <div className="text-xs opacity-70">
+                      ממוצע ששולם ב-{result.closedMonthsCount} חודשים סגורים
+                    </div>
                     <div className="font-bold tabular-nums text-lg">
-                      {renderCurrency(result.currentMonthlyAdvance)}
+                      {renderCurrency(result.currentMonthlyAdvance)}/חודש
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs opacity-70">מקדמה חודשית מומלצת</div>
+                    <div className="text-xs opacity-70">
+                      התאמה מומלצת ל-{monthsLeft} חודשים שנותרו
+                    </div>
                     <div className="font-bold tabular-nums text-lg">
-                      {renderCurrency(result.recommendedMonthlyAdvance)}
+                      {adjustment > 0 ? '+' : ''}
+                      {renderCurrency(Math.round(adjustment))}/חודש
                     </div>
                   </div>
                 </div>
@@ -320,15 +330,32 @@ const TaxForecastModal: React.FC<TaxForecastModalProps> = ({ isOpen, onClose, tr
           {/* STEP 6: Reconcile against advances */}
           <Step
             num={6}
-            title="התחשבנות מול מקדמות"
-            subtitle="מקדמות מס הכנסה ששולמו עד כה + אלה שטרם שולמו (פתוחות בתזרים)"
+            title="התחשבנות מול מקדמות מס הכנסה"
+            subtitle={`חודשים שטרם הוזנה להם הכנסה ינתחזו ב-${(INCOME_TAX_ADVANCE_RATE * 100).toFixed(0)}% × ההכנסה הצפויה (לפי הכלל האוטומטי במערכת)`}
           >
             <StepRow label="מס נטו לשנה" value={result.netTaxOwed} />
-            <StepRow label="מקדמות שכבר שולמו" value={result.ytdAdvancesPaid} emphasis="sub" />
             <StepRow
-              label="מקדמות צפויות עד סוף השנה"
-              value={result.projectedAnnualAdvances - result.ytdAdvancesPaid}
+              label="מקדמות ששולמו בחודשים סגורים"
+              value={result.ytdAdvancesPaid}
+              hint={
+                result.closedMonthsCount > 0
+                  ? `${result.closedMonthsCount} חודשים, ממוצע ${renderCurrency(result.currentMonthlyAdvance)}/חודש`
+                  : undefined
+              }
               emphasis="sub"
+            />
+            {result.remainingAdvancesForecast > 0 && (
+              <StepRow
+                label={`תחזית מקדמות לחודשים שנותרו (${(INCOME_TAX_ADVANCE_RATE * 100).toFixed(0)}% × ממוצע הכנסה נטו)`}
+                value={result.remainingAdvancesForecast}
+                hint={`${result.monthsRemainingForAdvance} חודשים × 14% × ${renderCurrency(result.averageMonthlyIncome)}/חודש`}
+                emphasis="sub"
+              />
+            )}
+            <StepRow
+              label="סה&quot;כ מקדמות צפויות לשנה"
+              value={result.projectedAnnualAdvances}
+              bold
             />
             <StepRow
               label={

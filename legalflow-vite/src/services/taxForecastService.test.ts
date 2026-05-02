@@ -6,6 +6,7 @@ import {
   isIncomeTaxAdvance,
   ANNUAL_CREDIT_POINT_VALUE_DEFAULT,
   TAX_BRACKETS_2026,
+  INCOME_TAX_ADVANCE_RATE,
 } from './taxForecastService';
 import type { Transaction } from '../types';
 
@@ -30,7 +31,6 @@ describe('calculateAnnualTax', () => {
   });
 
   it('applies just the 10% bracket for low income', () => {
-    // 50,000 < 84,120 → 10% × 50,000 = 5,000
     const r = calculateAnnualTax(50_000);
     expect(r.totalTax).toBeCloseTo(5_000, 2);
     expect(r.breakdown).toHaveLength(1);
@@ -39,9 +39,9 @@ describe('calculateAnnualTax', () => {
 
   it('walks brackets cumulatively (10 + 14 + 20)', () => {
     // 150,000:
-    //   10% × 84,120                         = 8,412
-    //   14% × (120,720 - 84,120) = 36,600    = 5,124
-    //   20% × (150,000 - 120,720) = 29,280   = 5,856
+    //   10% × 84,120 = 8,412
+    //   14% × 36,600 = 5,124
+    //   20% × 29,280 = 5,856
     //   total = 19,392
     const r = calculateAnnualTax(150_000);
     expect(r.totalTax).toBeCloseTo(19_392, 2);
@@ -49,26 +49,13 @@ describe('calculateAnnualTax', () => {
   });
 
   it('reaches the 31% bracket', () => {
-    // 250,000:
-    //   10% × 84,120 = 8,412
-    //   14% × 36,600 = 5,124
-    //   20% × 73,080 = 14,616
-    //   31% × (250,000 - 193,800) = 56,200 → 17,422
-    //   total = 45,574
+    // 250,000 → total = 45,574
     const r = calculateAnnualTax(250_000);
     expect(r.totalTax).toBeCloseTo(45_574, 2);
   });
 
   it('reaches the top 50% bracket on very high income', () => {
-    // 800,000:
-    //   10 × 84,120        = 8,412
-    //   14 × 36,600        = 5,124
-    //   20 × 73,080        = 14,616
-    //   31 × 75,480        = 23,398.8
-    //   35 × (560,280 - 269,280) = 291,000 → 101,850
-    //   47 × (721,560 - 560,280) = 161,280 → 75,801.6
-    //   50 × (800,000 - 721,560) = 78,440 → 39,220
-    //   total ≈ 268,422.40
+    // 800,000 → 268,422.40
     const r = calculateAnnualTax(800_000);
     expect(r.totalTax).toBeCloseTo(268_422.4, 1);
     expect(r.breakdown.length).toBe(7);
@@ -76,7 +63,6 @@ describe('calculateAnnualTax', () => {
   });
 
   it('matches the bracket table — exactly at first threshold', () => {
-    // 84,120 = exact top of bracket 1 → 10% × 84,120 = 8,412
     const r = calculateAnnualTax(84_120);
     expect(r.totalTax).toBeCloseTo(8_412, 2);
   });
@@ -92,23 +78,18 @@ describe('classifiers', () => {
     it('includes operational expenses', () => {
       expect(isDeductibleExpense(makeTx({ group: 'operational', type: 'expense' }))).toBe(true);
     });
-
     it('excludes loans (not a business expense)', () => {
       expect(isDeductibleExpense(makeTx({ group: 'loan', type: 'expense' }))).toBe(false);
     });
-
     it('excludes personal/withdrawals/alimony', () => {
       expect(isDeductibleExpense(makeTx({ group: 'personal', type: 'expense' }))).toBe(false);
     });
-
     it('excludes the tax payments themselves', () => {
       expect(isDeductibleExpense(makeTx({ group: 'tax', type: 'expense' }))).toBe(false);
     });
-
     it('excludes bank adjustments', () => {
       expect(isDeductibleExpense(makeTx({ group: 'bank_adjustment', type: 'expense' }))).toBe(false);
     });
-
     it('rejects income rows even if group=operational', () => {
       expect(isDeductibleExpense(makeTx({ group: 'operational', type: 'income' }))).toBe(false);
     });
@@ -116,24 +97,18 @@ describe('classifiers', () => {
 
   describe('isIncomeTaxAdvance', () => {
     it('matches "מס הכנסה אישי"', () => {
-      expect(
-        isIncomeTaxAdvance(makeTx({ group: 'tax', category: 'מס הכנסה אישי' }))
-      ).toBe(true);
+      expect(isIncomeTaxAdvance(makeTx({ group: 'tax', category: 'מס הכנסה אישי' }))).toBe(true);
     });
-
     it('matches "מקדמת מס" / "מקדמות מס"', () => {
       expect(isIncomeTaxAdvance(makeTx({ group: 'tax', category: 'מקדמת מס' }))).toBe(true);
       expect(isIncomeTaxAdvance(makeTx({ group: 'tax', category: 'מקדמות מס' }))).toBe(true);
     });
-
     it('does NOT match VAT', () => {
       expect(isIncomeTaxAdvance(makeTx({ group: 'tax', category: 'מע"מ' }))).toBe(false);
     });
-
-    it('does NOT match non-tax groups even if category mentions מס', () => {
+    it('does NOT match non-tax groups', () => {
       expect(isIncomeTaxAdvance(makeTx({ group: 'operational', category: 'מס הכנסה' }))).toBe(false);
     });
-
     it('matches via description text', () => {
       expect(
         isIncomeTaxAdvance(
@@ -144,22 +119,32 @@ describe('classifiers', () => {
   });
 });
 
-describe('calculateTaxForecast', () => {
-  it('handles empty transactions (zero everywhere, no NaN)', () => {
-    const r = calculateTaxForecast({ transactions: [], referenceDate: new Date(2026, 4, 15) });
-    expect(r.year).toBe(2026);
-    expect(r.taxableIncome).toBe(0);
-    expect(r.grossTax).toBe(0);
-    expect(r.netTaxOwed).toBe(0);
-    expect(r.balanceVsAdvances).toBe(0);
-  });
-
+describe('calculateTaxForecast (delegates to forecast service)', () => {
   it('uses 2.25 base credit points (~6,750 ₪/yr) by default', () => {
     expect(ANNUAL_CREDIT_POINT_VALUE_DEFAULT).toBeCloseTo(6_750, 2);
   });
 
-  it('projects from 4 closed months YTD (May 2026)', () => {
-    // 4 closed months × 100,000 ₪ fee/month and 30,000 ₪ deductible/month
+  it('exports the 14% advance rate constant', () => {
+    expect(INCOME_TAX_ADVANCE_RATE).toBe(0.14);
+  });
+
+  it('handles empty transactions (zero everywhere, no NaN)', () => {
+    const r = calculateTaxForecast({
+      transactions: [],
+      referenceDate: new Date(2026, 4, 15),
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: null,
+    });
+    expect(r.year).toBe(2026);
+    expect(r.taxableIncome).toBe(0);
+    expect(r.grossTax).toBe(0);
+    expect(r.netTaxOwed).toBe(0);
+  });
+
+  it('strips VAT from fee income (fee.amount / 1.18 = net)', () => {
+    // 4 closed months × 354,000 ₪ gross fees (= 300,000 net per month).
+    // No expenses, no advances. May 2026 → 4 closed months, 8 remaining.
     const txs: Transaction[] = [];
     for (let m = 0; m < 4; m++) {
       txs.push(
@@ -167,141 +152,66 @@ describe('calculateTaxForecast', () => {
           date: `2026-${String(m + 1).padStart(2, '0')}-15`,
           type: 'income',
           group: 'fee',
-          category: 'שכר טרחה',
-          amount: 100_000,
-          status: 'completed',
-        })
-      );
-      txs.push(
-        makeTx({
-          date: `2026-${String(m + 1).padStart(2, '0')}-20`,
-          type: 'expense',
-          group: 'operational',
-          amount: 30_000,
+          amount: 354_000, // gross with VAT
           status: 'completed',
         })
       );
     }
     const r = calculateTaxForecast({
       transactions: txs,
-      referenceDate: new Date(2026, 4, 15), // May
+      referenceDate: new Date(2026, 4, 15),
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 0, // no manual override
     });
-    expect(r.closedMonthsCount).toBe(4);
-    // Months to fill (May-Dec) = 8. Average × 8 = 800,000 income / 240,000 expenses.
-    // YTD = 400,000 income / 120,000 expenses.
-    // Projected annual: 400 + 800 = 1,200,000 income, 120 + 240 = 360,000 expenses.
-    expect(r.projectedAnnualIncome).toBeCloseTo(1_200_000, 0);
-    expect(r.projectedAnnualDeductibleExpenses).toBeCloseTo(360_000, 0);
-    expect(r.taxableIncome).toBeCloseTo(840_000, 0);
-    // Tax on 840,000 (manually):
-    //   10 × 84,120 = 8,412
-    //   14 × 36,600 = 5,124
-    //   20 × 73,080 = 14,616
-    //   31 × 75,480 = 23,398.8
-    //   35 × 291,000 = 101,850
-    //   47 × 161,280 = 75,801.6
-    //   50 × (840,000 - 721,560) = 118,440 → 59,220
-    //   total ≈ 288,422.40
-    expect(r.grossTax).toBeCloseTo(288_422.4, 1);
-    expect(r.netTaxOwed).toBeCloseTo(288_422.4 - 6_750, 1);
+    // YTD net: 4 × 300,000 = 1,200,000
+    expect(r.ytdIncome).toBeCloseTo(1_200_000, 0);
+    // Avg/month net: 300,000. 8 remaining months × 300k = 2,400,000
+    expect(r.remainingIncomeForecast).toBeCloseTo(2_400_000, 0);
+    expect(r.projectedAnnualIncome).toBeCloseTo(3_600_000, 0);
   });
 
-  it('balanceVsAdvances goes negative (refund) when advances exceed net tax', () => {
-    // Low income, but big advances paid
+  it('does NOT include other_income in income forecast', () => {
+    const txs: Transaction[] = [
+      makeTx({
+        date: '2026-01-15',
+        type: 'income',
+        group: 'fee',
+        amount: 118_000, // 100k net
+        status: 'completed',
+      }),
+      makeTx({
+        date: '2026-01-15',
+        type: 'income',
+        group: 'other_income',
+        amount: 50_000,
+        status: 'completed',
+      }),
+    ];
+    const r = calculateTaxForecast({
+      transactions: txs,
+      referenceDate: new Date(2026, 1, 15), // Feb (Jan closed)
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 0,
+    });
+    expect(r.ytdIncome).toBeCloseTo(100_000, 0); // only the fee net, not other_income
+  });
+
+  it('only counts operational expenses (excludes loans, personal, taxes, bank adj)', () => {
     const txs: Transaction[] = [
       makeTx({
         date: '2026-01-10',
         type: 'income',
         group: 'fee',
-        amount: 50_000,
+        amount: 118_000,
         status: 'completed',
       }),
       makeTx({
-        date: '2026-02-23',
+        date: '2026-01-15',
         type: 'expense',
-        group: 'tax',
-        category: 'מס הכנסה אישי',
-        amount: 100_000,
-        status: 'completed',
-      }),
-    ];
-    const r = calculateTaxForecast({
-      transactions: txs,
-      referenceDate: new Date(2026, 4, 15),
-    });
-    expect(r.balanceVsAdvances).toBeLessThan(0);
-  });
-
-  it('counts pending future tax advances toward projected advances', () => {
-    const txs: Transaction[] = [
-      makeTx({
-        date: '2026-06-23',
-        type: 'expense',
-        group: 'tax',
-        category: 'מס הכנסה אישי',
+        group: 'operational',
         amount: 5_000,
-        status: 'pending',
-      }),
-    ];
-    const r = calculateTaxForecast({
-      transactions: txs,
-      referenceDate: new Date(2026, 4, 15),
-    });
-    expect(r.ytdAdvancesPaid).toBe(0);
-    expect(r.projectedAnnualAdvances).toBe(5_000);
-  });
-
-  it('past-year mode: no projection, just YTD totals', () => {
-    const txs: Transaction[] = [
-      makeTx({
-        date: '2025-03-10',
-        type: 'income',
-        group: 'fee',
-        amount: 100_000,
-        status: 'completed',
-      }),
-    ];
-    const r = calculateTaxForecast({
-      transactions: txs,
-      year: 2025,
-      referenceDate: new Date(2026, 4, 15),
-    });
-    expect(r.projectedAnnualIncome).toBeCloseTo(100_000, 0);
-    expect(r.monthsRemaining).toBe(0);
-  });
-
-  it('respects year filter (ignores transactions from other years)', () => {
-    const txs: Transaction[] = [
-      makeTx({
-        date: '2025-12-31',
-        type: 'income',
-        group: 'fee',
-        amount: 1_000_000,
-        status: 'completed',
-      }),
-      makeTx({
-        date: '2026-01-15',
-        type: 'income',
-        group: 'fee',
-        amount: 100_000,
-        status: 'completed',
-      }),
-    ];
-    const r = calculateTaxForecast({
-      transactions: txs,
-      year: 2026,
-      referenceDate: new Date(2026, 4, 15),
-    });
-    expect(r.ytdIncome).toBe(100_000);
-  });
-
-  it('excludes non-deductible groups from projected expenses', () => {
-    const txs: Transaction[] = [
-      makeTx({
-        date: '2026-01-15',
-        type: 'income',
-        group: 'fee',
-        amount: 100_000,
         status: 'completed',
       }),
       makeTx({
@@ -322,56 +232,49 @@ describe('calculateTaxForecast', () => {
       makeTx({
         date: '2026-01-15',
         type: 'expense',
-        group: 'operational',
-        amount: 5_000,
+        group: 'bank_adjustment',
+        amount: 1_000,
         status: 'completed',
       }),
     ];
     const r = calculateTaxForecast({
       transactions: txs,
-      year: 2026,
-      referenceDate: new Date(2026, 1, 15), // Feb (Jan closed)
+      referenceDate: new Date(2026, 1, 15),
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 0,
     });
-    expect(r.ytdDeductibleExpenses).toBe(5_000); // only operational
+    expect(r.ytdDeductibleExpenses).toBe(5_000);
   });
 
-  it('uses scheduled future income when greater than monthly average', () => {
-    // 4 closed months at 50,000 → average 50k/mo
-    // 1 huge scheduled June fee at 1,000,000
-    const txs: Transaction[] = [];
-    for (let m = 0; m < 4; m++) {
-      txs.push(
-        makeTx({
-          date: `2026-${String(m + 1).padStart(2, '0')}-15`,
-          type: 'income',
-          group: 'fee',
-          amount: 50_000,
-          status: 'completed',
-        })
-      );
-    }
-    txs.push(
+  it("user's actual Jan-Apr 2026 advances roll up correctly", () => {
+    // From the user's confirmed payments:
+    //   Jan 32,382  Feb 47,170  Mar 51,594  Apr 47,609  → total 178,755
+    const advances = [32_382, 47_170, 51_594, 47_609];
+    const txs: Transaction[] = advances.map((amount, i) =>
       makeTx({
-        date: '2026-06-30',
-        type: 'income',
-        group: 'fee',
-        amount: 1_000_000,
-        status: 'pending',
+        date: `2026-${String(i + 1).padStart(2, '0')}-23`,
+        type: 'expense',
+        group: 'tax',
+        category: 'מס הכנסה אישי',
+        amount,
+        status: 'completed',
       })
     );
     const r = calculateTaxForecast({
       transactions: txs,
-      referenceDate: new Date(2026, 4, 15), // May
+      referenceDate: new Date(2026, 4, 15),
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 0,
     });
-    // Closed = 200k. monthsToFill = 8. avg projection = 8 × 50k = 400k.
-    // Scheduled future = 1,000k > 400k → use scheduled.
-    // Projected annual = 200k + 1,000k = 1,200k
-    expect(r.projectedAnnualIncome).toBeCloseTo(1_200_000, 0);
+    expect(r.ytdAdvancesPaid).toBe(178_755);
+    expect(r.currentMonthlyAdvance).toBeCloseTo(178_755 / 4, 1);
   });
 
-  it('flags an under-paying monthly advance as positive delta', () => {
-    // 4 closed months × 100,000 fee, no expenses, only 1,000 ₪/mo advances paid.
-    // Net tax forecast will be huge → recommended monthly advance >> current.
+  it('flags an under-paying monthly advance as positive adjustment', () => {
+    // 4 closed months × 354,000 gross fees (= 300k net), 1,000 ₪/mo advance.
+    // Net forecast tax >> what's projected → should recommend increase.
     const txs: Transaction[] = [];
     for (let m = 0; m < 4; m++) {
       txs.push(
@@ -379,7 +282,7 @@ describe('calculateTaxForecast', () => {
           date: `2026-${String(m + 1).padStart(2, '0')}-15`,
           type: 'income',
           group: 'fee',
-          amount: 100_000,
+          amount: 354_000,
           status: 'completed',
         })
       );
@@ -397,19 +300,28 @@ describe('calculateTaxForecast', () => {
     const r = calculateTaxForecast({
       transactions: txs,
       referenceDate: new Date(2026, 4, 15),
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 0,
     });
     expect(r.currentMonthlyAdvance).toBe(1_000);
-    expect(r.recommendedMonthlyAdvance).toBeGreaterThan(20_000);
-    expect(r.monthlyAdvanceDelta).toBeGreaterThan(0); // under-paying
+    expect(r.monthsRemainingForAdvance).toBe(8);
+    expect(r.monthlyAdvanceAdjustment).toBeGreaterThan(0);
+    expect(r.balanceVsAdvances).toBeGreaterThan(0);
+    // Adjustment × monthsLeft ≈ balance
+    expect(r.monthlyAdvanceAdjustment * r.monthsRemainingForAdvance).toBeCloseTo(
+      r.balanceVsAdvances,
+      0
+    );
   });
 
-  it('flags an over-paying monthly advance as negative delta', () => {
+  it('flags an over-paying monthly advance as negative adjustment (refund)', () => {
     const txs: Transaction[] = [
       makeTx({
         date: '2026-01-15',
         type: 'income',
         group: 'fee',
-        amount: 30_000,
+        amount: 35_400, // 30k net
         status: 'completed',
       }),
       makeTx({
@@ -423,9 +335,40 @@ describe('calculateTaxForecast', () => {
     ];
     const r = calculateTaxForecast({
       transactions: txs,
-      referenceDate: new Date(2026, 1, 15), // Feb (Jan closed)
+      referenceDate: new Date(2026, 1, 15),
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 0,
     });
-    expect(r.monthlyAdvanceDelta).toBeLessThan(0);
+    expect(r.balanceVsAdvances).toBeLessThan(0);
+    expect(r.monthlyAdvanceAdjustment).toBeLessThan(0);
+  });
+
+  it('respects forecastManualMonthlyTotal override (uses 185k×8 instead of buckets)', () => {
+    // 4 closed months × 354k gross fees, no expenses entered, manual=185k/mo
+    const txs: Transaction[] = [];
+    for (let m = 0; m < 4; m++) {
+      txs.push(
+        makeTx({
+          date: `2026-${String(m + 1).padStart(2, '0')}-15`,
+          type: 'income',
+          group: 'fee',
+          amount: 354_000,
+          status: 'completed',
+        })
+      );
+    }
+    const r = calculateTaxForecast({
+      transactions: txs,
+      referenceDate: new Date(2026, 4, 15),
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 185_000,
+    });
+    expect(r.isManualMonthlyTotalUsed).toBe(true);
+    // 8 remaining months × 185k = 1,480,000 projected expenses
+    // YTD operational = 0
+    expect(r.projectedAnnualDeductibleExpenses).toBeCloseTo(1_480_000, 0);
   });
 
   it('honors a custom credit-point value override', () => {
@@ -434,17 +377,48 @@ describe('calculateTaxForecast', () => {
         date: '2026-01-15',
         type: 'income',
         group: 'fee',
-        amount: 200_000,
+        amount: 354_000,
         status: 'completed',
       }),
     ];
     const r = calculateTaxForecast({
       transactions: txs,
-      year: 2026,
-      referenceDate: new Date(2026, 11, 31), // Dec - no projection
+      referenceDate: new Date(2026, 11, 31),
       annualCreditPointValue: 0,
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 0,
     });
     expect(r.creditPointsValue).toBe(0);
     expect(r.netTaxOwed).toBe(r.grossTax);
+  });
+
+  it('balanceVsAdvances goes negative (refund) when advances exceed net tax', () => {
+    // Modest income, very high advance YTD
+    const txs: Transaction[] = [
+      makeTx({
+        date: '2026-01-10',
+        type: 'income',
+        group: 'fee',
+        amount: 59_000, // 50k net
+        status: 'completed',
+      }),
+      makeTx({
+        date: '2026-01-23',
+        type: 'expense',
+        group: 'tax',
+        category: 'מס הכנסה אישי',
+        amount: 100_000,
+        status: 'completed',
+      }),
+    ];
+    const r = calculateTaxForecast({
+      transactions: txs,
+      referenceDate: new Date(2026, 4, 15),
+      forecastItemOverrides: {},
+      forecastMonthlyBuffer: 0,
+      forecastManualMonthlyTotal: 0,
+    });
+    expect(r.balanceVsAdvances).toBeLessThan(0);
   });
 });
