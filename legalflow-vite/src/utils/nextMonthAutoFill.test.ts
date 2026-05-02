@@ -47,7 +47,7 @@ describe('buildForecastBucketKey', () => {
   it('uses category when provided', () => {
     const key1 = buildForecastBucketKey('משכורות עובדים', 'יוסי', 'operational');
     const key2 = buildForecastBucketKey('משכורות עובדים', 'דני', 'operational');
-    expect(key1).toBe(key2); // same category → same bucket regardless of description
+    expect(key1).toBe(key2);
   });
   it('falls back to description when no category', () => {
     const key = buildForecastBucketKey('', 'משכורות', 'operational');
@@ -60,13 +60,13 @@ describe('getDefaultTargetMonth', () => {
     const may1 = new Date(2026, 4, 1);
     const target = getDefaultTargetMonth(may1);
     expect(target.year).toBe(2026);
-    expect(target.month).toBe(5); // June (0-indexed)
+    expect(target.month).toBe(5);
   });
   it('handles year transition (December → January next year)', () => {
     const dec15 = new Date(2026, 11, 15);
     const target = getDefaultTargetMonth(dec15);
     expect(target.year).toBe(2027);
-    expect(target.month).toBe(0); // January
+    expect(target.month).toBe(0);
   });
 });
 
@@ -79,17 +79,17 @@ describe('formatTargetMonthLabel', () => {
 });
 
 describe('formatLookbackLabel', () => {
-  it('lists every closed month of the current year', () => {
-    const may1 = new Date(2026, 4, 1);
-    const label = formatLookbackLabel({ year: 2026, month: 5 }, may1);
-    expect(label).toContain('ינואר');
-    expect(label).toContain('אפריל');
-    expect(label).not.toContain('מאי');
+  it('returns the source month (target - 1) in Hebrew', () => {
+    // Target = June 2026 → source = May 2026
+    const label = formatLookbackLabel({ year: 2026, month: 5 });
+    expect(label).toContain('מאי');
+    expect(label).toContain('2026');
   });
-  it('returns fallback when no closed months yet', () => {
-    const jan5 = new Date(2026, 0, 5);
-    const label = formatLookbackLabel({ year: 2026, month: 1 }, jan5);
-    expect(label).toBe('אין חודשים שנסגרו השנה');
+
+  it('handles year transition (Jan target → Dec previous year source)', () => {
+    const label = formatLookbackLabel({ year: 2027, month: 0 });
+    expect(label).toContain('דצמבר');
+    expect(label).toContain('2026');
   });
 });
 
@@ -101,8 +101,8 @@ describe('DEFAULT_AUTOFILL_BLACKLIST', () => {
   });
 });
 
-describe('computeNextMonthSuggestions', () => {
-  // Mock today = May 1, 2026 → closed months = Jan, Feb, Mar, Apr (4 months)
+describe('computeNextMonthSuggestions (copy from previous month)', () => {
+  // Today = May 1, 2026. Target = June. Source = May (the month before target).
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 4, 1));
@@ -113,104 +113,115 @@ describe('computeNextMonthSuggestions', () => {
 
   const target = { year: 2026, month: 5 }; // June
 
-  it('strict mode: only suggests items present in EVERY closed month', () => {
+  it('copies every eligible item from the source month (target - 1) with exact amounts and dates', () => {
     const transactions: Transaction[] = [
-      // שכר דירה - in all 4 months → should suggest
-      tx({ date: '2026-01-01', category: 'שכר דירה', amount: 5000 }),
-      tx({ date: '2026-02-01', category: 'שכר דירה', amount: 5000 }),
-      tx({ date: '2026-03-01', category: 'שכר דירה', amount: 5000 }),
-      tx({ date: '2026-04-01', category: 'שכר דירה', amount: 5000 }),
-      // אייפד - only in 1 month → should NOT suggest (and is in blacklist anyway)
-      tx({ date: '2026-01-15', category: 'אייפד', amount: 4000 }),
-      // משהו אחר - only in 3 of 4 months → should NOT suggest (strict rule)
-      tx({ date: '2026-01-10', category: 'חשמל', amount: 800 }),
-      tx({ date: '2026-02-10', category: 'חשמל', amount: 900 }),
-      tx({ date: '2026-03-10', category: 'חשמל', amount: 1000 }),
-      // missing April for חשמל
+      // May 2026 (source for June target)
+      tx({ date: '2026-05-01', category: 'שכר דירה', amount: 5000 }),
+      tx({ date: '2026-05-15', group: 'loan', category: 'הלוואה', amount: 1770 }),
+      tx({ date: '2026-05-20', group: 'personal', category: 'משיכה פרטית', amount: 8000 }),
+      // April 2026 (NOT source - earlier)
+      tx({ date: '2026-04-01', category: 'משהו אחר', amount: 999 }),
     ];
-
     const suggestions = computeNextMonthSuggestions(transactions, target);
-    const categories = suggestions.map(s => s.category);
-    expect(categories).toContain('שכר דירה');
-    expect(categories).not.toContain('חשמל');
-    expect(categories).not.toContain('אייפד');
+    expect(suggestions).toHaveLength(3);
+    const cats = suggestions.map(s => s.category).sort();
+    expect(cats).toEqual(['הלוואה', 'משיכה פרטית', 'שכר דירה']);
+    // Same amount preserved exactly (no averaging)
+    const rent = suggestions.find(s => s.category === 'שכר דירה')!;
+    expect(rent.averageAmount).toBe(5000);
+    // Same day-of-month, shifted to June
+    expect(rent.proposedDate).toBe('2026-06-01');
+    const loan = suggestions.find(s => s.category === 'הלוואה')!;
+    expect(loan.proposedDate).toBe('2026-06-15');
   });
 
-  it('skips items in DEFAULT_AUTOFILL_BLACKLIST even when present in all months', () => {
+  it('falls back to the most recent earlier month with data when (target-1) is empty', () => {
+    // Source month (May) has no eligible rows. April does → use April.
     const transactions: Transaction[] = [
-      tx({ date: '2026-01-01', category: 'אייפד', amount: 5000 }),
-      tx({ date: '2026-02-01', category: 'אייפד', amount: 5000 }),
-      tx({ date: '2026-03-01', category: 'אייפד', amount: 5000 }),
-      tx({ date: '2026-04-01', category: 'אייפד', amount: 5000 }),
+      tx({ date: '2026-04-10', category: 'חשמל', amount: 800 }),
+      tx({ date: '2026-04-20', category: 'מים', amount: 250 }),
+    ];
+    const suggestions = computeNextMonthSuggestions(transactions, target);
+    expect(suggestions).toHaveLength(2);
+    expect(suggestions[0].monthsAppeared[0]).toBe('2026-04');
+    expect(suggestions.find(s => s.category === 'חשמל')!.proposedDate).toBe('2026-06-10');
+  });
+
+  it('returns empty when no earlier month has any eligible data', () => {
+    const transactions: Transaction[] = [
+      // Only data in target month itself
+      tx({ date: '2026-06-15', category: 'שכר דירה' }),
     ];
     const suggestions = computeNextMonthSuggestions(transactions, target);
     expect(suggestions).toHaveLength(0);
   });
 
-  it('merges variant descriptions across months via normalization', () => {
+  it('skips items in the DEFAULT_AUTOFILL_BLACKLIST', () => {
     const transactions: Transaction[] = [
-      tx({ date: '2026-01-01', description: 'ספיקן ינואר 2026', category: '' }),
-      tx({ date: '2026-02-01', description: 'ספיקן פברואר', category: '' }),
-      tx({ date: '2026-03-01', description: 'ספיקן - מרץ', category: '' }),
-      tx({ date: '2026-04-01', description: 'ספיקן', category: '' }),
+      tx({ date: '2026-05-01', category: 'אייפד', amount: 5000 }),
+      tx({ date: '2026-05-02', category: 'שכר דירה', amount: 6000 }),
     ];
     const suggestions = computeNextMonthSuggestions(transactions, target);
     expect(suggestions).toHaveLength(1);
-    expect(suggestions[0].monthsAppeared).toHaveLength(4);
+    expect(suggestions[0].category).toBe('שכר דירה');
   });
 
-  it('frequency-aware slots: items with multiple monthly occurrences get N suggestions', () => {
+  it('multiple entries with same description in the source month all come through (no slot dedup)', () => {
+    // The user's actual flow: credit card billed twice in same month.
     const transactions: Transaction[] = [
-      // Credit card billed 2x per month, every month
-      tx({ date: '2026-01-05', category: 'אשראי', amount: 1000 }),
-      tx({ date: '2026-01-25', category: 'אשראי', amount: 500 }),
-      tx({ date: '2026-02-05', category: 'אשראי', amount: 1100 }),
-      tx({ date: '2026-02-25', category: 'אשראי', amount: 600 }),
-      tx({ date: '2026-03-05', category: 'אשראי', amount: 1200 }),
-      tx({ date: '2026-03-25', category: 'אשראי', amount: 700 }),
-      tx({ date: '2026-04-05', category: 'אשראי', amount: 1300 }),
-      tx({ date: '2026-04-25', category: 'אשראי', amount: 800 }),
+      tx({ date: '2026-05-05', category: 'אשראי', amount: 1000 }),
+      tx({ date: '2026-05-25', category: 'אשראי', amount: 500 }),
     ];
     const suggestions = computeNextMonthSuggestions(transactions, target);
-    const creditSlots = suggestions.filter(s => s.category === 'אשראי');
-    expect(creditSlots).toHaveLength(2);
-    // Sorted by day - first slot ~5th, second ~25th
-    const sorted = creditSlots.slice().sort(
-      (a, b) => parseInt(a.proposedDate.slice(8), 10) - parseInt(b.proposedDate.slice(8), 10),
-    );
-    expect(parseInt(sorted[0].proposedDate.slice(8), 10)).toBe(5);
-    expect(parseInt(sorted[1].proposedDate.slice(8), 10)).toBe(25);
+    expect(suggestions.filter(s => s.category === 'אשראי')).toHaveLength(2);
   });
 
   it('skips loans whose loanEndMonth has passed', () => {
     const transactions: Transaction[] = [
-      tx({ date: '2026-01-01', group: 'loan', category: 'הלוואה ישנה', loanEndMonth: '2026-04', amount: 1000 }),
-      tx({ date: '2026-02-01', group: 'loan', category: 'הלוואה ישנה', loanEndMonth: '2026-04', amount: 1000 }),
-      tx({ date: '2026-03-01', group: 'loan', category: 'הלוואה ישנה', loanEndMonth: '2026-04', amount: 1000 }),
-      tx({ date: '2026-04-01', group: 'loan', category: 'הלוואה ישנה', loanEndMonth: '2026-04', amount: 1000 }),
+      tx({
+        date: '2026-05-01',
+        group: 'loan',
+        category: 'הלוואה ישנה',
+        loanEndMonth: '2026-05',
+        amount: 1000,
+      }),
+      tx({
+        date: '2026-05-02',
+        group: 'loan',
+        category: 'הלוואה פעילה',
+        loanEndMonth: '2026-12',
+        amount: 1000,
+      }),
     ];
-    // Target = June 2026, but loan ends April → should NOT be suggested
     const suggestions = computeNextMonthSuggestions(transactions, target);
-    expect(suggestions).toHaveLength(0);
+    expect(suggestions.map(s => s.category)).toEqual(['הלוואה פעילה']);
   });
 
   it('skips income transactions (only operational/loan/personal)', () => {
     const transactions: Transaction[] = [
-      tx({ date: '2026-01-15', group: 'fee', type: 'income', amount: 10000 }),
-      tx({ date: '2026-02-15', group: 'fee', type: 'income', amount: 10000 }),
-      tx({ date: '2026-03-15', group: 'fee', type: 'income', amount: 10000 }),
-      tx({ date: '2026-04-15', group: 'fee', type: 'income', amount: 10000 }),
+      tx({ date: '2026-05-15', group: 'fee', type: 'income', amount: 10000 }),
+      tx({ date: '2026-05-15', group: 'other_income', type: 'income', amount: 5000 }),
     ];
     const suggestions = computeNextMonthSuggestions(transactions, target);
     expect(suggestions).toHaveLength(0);
   });
 
-  it('skips auto-generated transactions', () => {
+  it('skips auto-generated transactions (system-created tax/VAT)', () => {
     const transactions: Transaction[] = [
-      tx({ date: '2026-01-23', group: 'tax', category: 'מס הכנסה אישי', isAutoGenerated: true, amount: 5000 }),
-      tx({ date: '2026-02-23', group: 'tax', category: 'מס הכנסה אישי', isAutoGenerated: true, amount: 5000 }),
-      tx({ date: '2026-03-23', group: 'tax', category: 'מס הכנסה אישי', isAutoGenerated: true, amount: 5000 }),
-      tx({ date: '2026-04-23', group: 'tax', category: 'מס הכנסה אישי', isAutoGenerated: true, amount: 5000 }),
+      tx({
+        date: '2026-05-23',
+        group: 'tax',
+        category: 'מס הכנסה אישי',
+        isAutoGenerated: true,
+        amount: 5000,
+      }),
+      tx({
+        date: '2026-05-25',
+        group: 'tax',
+        category: 'מע"מ',
+        isAutoGenerated: true,
+        amount: 8000,
+      }),
     ];
     const suggestions = computeNextMonthSuggestions(transactions, target);
     expect(suggestions).toHaveLength(0);
@@ -218,11 +229,8 @@ describe('computeNextMonthSuggestions', () => {
 
   it('flags items already existing in the target month as alreadyExistsInTargetMonth', () => {
     const transactions: Transaction[] = [
-      tx({ date: '2026-01-01', category: 'שכר דירה', amount: 5000 }),
-      tx({ date: '2026-02-01', category: 'שכר דירה', amount: 5000 }),
-      tx({ date: '2026-03-01', category: 'שכר דירה', amount: 5000 }),
-      tx({ date: '2026-04-01', category: 'שכר דירה', amount: 5000 }),
-      // already created for June
+      tx({ date: '2026-05-01', category: 'שכר דירה', amount: 5000 }),
+      // Already added a June rent
       tx({ date: '2026-06-01', category: 'שכר דירה', amount: 5000, status: 'pending' }),
     ];
     const suggestions = computeNextMonthSuggestions(transactions, target);
@@ -232,27 +240,38 @@ describe('computeNextMonthSuggestions', () => {
 
   it('respects user blacklist (in addition to defaults)', () => {
     const transactions: Transaction[] = [
-      tx({ date: '2026-01-01', category: 'מזונות', amount: 10000 }),
-      tx({ date: '2026-02-01', category: 'מזונות', amount: 10000 }),
-      tx({ date: '2026-03-01', category: 'מזונות', amount: 10000 }),
-      tx({ date: '2026-04-01', category: 'מזונות', amount: 10000 }),
+      tx({ date: '2026-05-01', category: 'מזונות', amount: 10000 }),
+      tx({ date: '2026-05-02', category: 'אחר', amount: 1000 }),
     ];
     const withBlacklist = computeNextMonthSuggestions(transactions, target, ['מזונות']);
-    expect(withBlacklist).toHaveLength(0);
-
+    expect(withBlacklist.map(s => s.category)).toEqual(['אחר']);
     const withoutBlacklist = computeNextMonthSuggestions(transactions, target, []);
-    expect(withoutBlacklist).toHaveLength(1);
+    expect(withoutBlacklist).toHaveLength(2);
   });
 
-  it('averages amounts per slot across months', () => {
+  it('clamps day-of-month to last day of target month (e.g. 31 Jan → 28 Feb)', () => {
+    // Source = January (Jan 31), target = February
+    const targetFeb = { year: 2026, month: 1 };
     const transactions: Transaction[] = [
-      tx({ date: '2026-01-01', category: 'שכר דירה', amount: 5000 }),
-      tx({ date: '2026-02-01', category: 'שכר דירה', amount: 6000 }),
-      tx({ date: '2026-03-01', category: 'שכר דירה', amount: 5500 }),
-      tx({ date: '2026-04-01', category: 'שכר דירה', amount: 5500 }),
+      tx({ date: '2026-01-31', category: 'שכר דירה', amount: 5000 }),
+    ];
+    const suggestions = computeNextMonthSuggestions(transactions, targetFeb);
+    expect(suggestions).toHaveLength(1);
+    // Feb 2026 has 28 days
+    expect(suggestions[0].proposedDate).toBe('2026-02-28');
+  });
+
+  it('output is sorted by date then by group, not bucket frequency', () => {
+    const transactions: Transaction[] = [
+      tx({ date: '2026-05-25', category: 'שכר דירה', amount: 5000 }),
+      tx({ date: '2026-05-05', group: 'loan', category: 'הלוואה', amount: 1000 }),
+      tx({ date: '2026-05-15', group: 'personal', category: 'משיכה', amount: 3000 }),
     ];
     const suggestions = computeNextMonthSuggestions(transactions, target);
-    expect(suggestions).toHaveLength(1);
-    expect(suggestions[0].averageAmount).toBeCloseTo(5500, 0); // (5000+6000+5500+5500)/4
+    expect(suggestions.map(s => s.proposedDate)).toEqual([
+      '2026-06-05',
+      '2026-06-15',
+      '2026-06-25',
+    ]);
   });
 });
