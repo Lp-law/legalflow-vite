@@ -436,8 +436,11 @@ const Dashboard: React.FC<DashboardProps> = ({
               <p className={`text-2xl font-bold ${ytdData.profit >= 0 ? 'text-[var(--law-gold)]' : 'text-rose-300'}`}>
                 {ytdData.profitPct.toFixed(1)}%
               </p>
-              <p className="text-xs text-slate-400 mt-1">
-                ₪{ytdData.profit.toLocaleString()} רווח על ₪{ytdData.income.toLocaleString()} הכנסות
+              <p className="text-xs text-slate-400 mt-1 tabular-nums">
+                ₪{Math.round(ytdData.income).toLocaleString()} − ₪{Math.round(ytdData.expenses).toLocaleString()} = ₪{Math.round(ytdData.profit).toLocaleString()}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                הכנסות פחות הוצאות תפעוליות (לא כולל מסים, הלוואות ומשיכות)
               </p>
             </>
           ) : (
